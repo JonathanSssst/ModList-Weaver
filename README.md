@@ -6,15 +6,52 @@
 
 ---
 
-## 更新日志 — V3.0
+## 版本历史 / Changelog
 
-| 特性 | 说明 |
+> 📦 每个大版本（V1.0 / V2.0 / V3.0 …）都已通过 GitHub Actions 打包为 Windows 单目录分发包，可在仓库 **Releases** 页直接下载。
+
+---
+
+### 🚀 V3.0 —— 断点续传 + CurseForge 双源 + 自动化 CI/CD（2026-08）
+
+**当前最新正式版本 · `git tag v3.0.0`**
+
+| 分类 | 功能点 |
 |---|---|
-| 🔁 **断点续传** | `.part` 临时文件 + HTTP Range 请求，中断后保留已下载字节，下次自动从断点续传 |
-| 🌐 **CurseForge 双源支持** | 新增 CurseForge 客户端（mur mur2 指纹匹配、版本查询、依赖下载、速率节流），与 Modrinth 自动互补 |
-| 🔀 **多源自动匹配** | settings.source = `auto` 时，扫描和下载会依次尝试两个源，数字 project_id 优先 CurseForge，slug 优先 Modrinth |
-| 🧪 **单元测试** | 新增 `tests/` 下 29 个 pytest 用例，覆盖 scanner 哈希、版本选择、TaskGate、限速器、murmur2、Settings 持久化 |
-| 🚀 **GitHub Actions CI** | push / PR / tag 时自动：① 2 OS × 3 Python 矩阵跑单测 ② Windows 打 PyInstaller 包 ③ 打 `v*` tag 时自动上传 GitHub Release |
+| 🔁 **断点续传** | `.part` 临时文件 + HTTP Range 请求检测，下载中断后保留已下载字节，下次自动从断点续传（Modrinth / CurseForge 双客户端一致实现） |
+| 🌐 **CurseForge 双源支持** | 新增独立 `CurseForgeClient`：murmur2 指纹匹配、项目搜索、版本列表、依赖递归、文件下载、服务端 429/速率节流自适应 |
+| 🔀 **多源自动路由** | `settings.source = auto/modrinth/curseforge`；扫描时 Modrinth sha512 未命中 → 自动 fallback CurseForge murmur2；下载时数字 project_id 优先 CurseForge，slug 优先 Modrinth |
+| 🔐 **多算法哈希校验** | 哈希优先级自适应：`sha512 > sha1 > murmur2`，从各自源 API 返回的可用字段中自动选择最可靠的校验方案 |
+| 🧪 **单元测试 29/29 PASS** | 新增 `tests/` 三套 pytest 用例：`test_scanner.py`（哈希 + jar 解析） / `test_downloader_logic.py`（版本选择 + TaskGate + 限速器 + 哈希策略） / `test_curseforge_and_settings.py`（murmur2 + Settings 持久化边界） |
+| 🚀 **GitHub Actions CI** | `.github/workflows/ci.yml` 三阶段自动化：① 所有 push/PR → `windows × ubuntu` × `Python 3.10/3.11/3.12` 跑单测矩阵 ② `main/master/v* tag` → PyInstaller 打 Windows 包 ③ **打 `v*` 正式 tag** → 自动上传 `.zip` 到仓库 Release 页并生成发布说明 |
+| 🏗️ **工程化** | `build.spec` 补全 backend 各模块、hashlib hiddenimports；`requirements.txt` 加入 pytest 开发依赖；`.gitignore` 补 `build/ dist/ .pytest_cache/` |
+
+---
+
+### 🧭 V2.0 —— 任务队列 + 实时监控 + 可暂停下载（2026-06）
+
+- **异步任务队列**：`run_batch_download` 任务队列化，默认并发 3（可配置），多任务并行独立调度
+- **协作式任务控制**：任务支持 `暂停 / 继续 / 停止 / 删除` 四元组；`TaskGate` 门控实现 awaitable 阻塞/放行/中断三种状态
+- **终态持久化**：任务完成 / 失败 / 停止后持久化到 `cache/temp/tasks.json`，重启后可查看历史并一键重试（`all / failed / missing` 三种作用域）
+- **实时监控**：文件粒度下载进度、瞬时网速（0.3s 滑动窗口，B/s → KB/s → MB/s → GB/s 自动换算）、跳过数独立统计
+- **实时日志流**：任务日志异步流式写入，支持前端 tail 读取，一键导出 `.log`
+- **令牌桶限速器**：`settings.rate_limit_mbps` 全局下行带宽节流（0 = 不限速）
+- **原生对话框**：基于 tkinter 的文件夹 / 文件 / 保存路径选择，不弹浏览器窗
+- **模组列表页**：Modrinth 关键词搜索 + MC 版本 + 加载器 + 项目类型筛选；单模组一键下载 + 自动补齐 required 前置依赖
+
+---
+
+### 🌱 V1.0 —— 项目骨架：扫描 → 导出 → 批量下载 MVP（2026-04）
+
+- **纯 Python jar 元数据解析**：`scanner.py` 直接读取 jar 内部 `fabric.mod.json` / `mods.toml` / `MANIFEST.MF`，自动识别 Fabric / Quilt / Forge / NeoForge 加载器，**不依赖 Java 环境**
+- **sha512 批量反查**：本地 jar 算 sha512 → Modrinth `version_files` 批量接口反查 project_id，识别率高；未命中标灰人工处理
+- **HMCL 兼容清单导出**：一键导出 `modlist.json`，字段 `name / version / game_version / loader / projects[]` 完全匹配 HMCL 导入格式
+- **Modrinth 批量下载**：读取 modlist → 按目标 MC 版本 + 加载器选择适配版本 → sha512 去重校验（一致跳过 / 不一致覆盖）
+- **依赖递归**：`required` 前置依赖自动下载，`optional` 忽略；`processed` 集合去重防环
+- **缺失模组报告**：无适配版本的模组导出 `missing_mods.txt` 清单
+- **桌面壳**：`main.py` 启动 uvicorn 后端（127.0.0.1:8765~8810 自动找可用端口） + pywebview 内嵌 WebView2 桌面窗口（1200×840）
+- **深色科技风前端**：原生 HTML/CSS/JS 单页，左侧导航 + 右侧内容区 + 底部状态栏网速显示
+- **settings 持久化**：`cache/settings.json` 热更新 max_concurrency / rate_limit_mbps / theme
 
 ---
 
