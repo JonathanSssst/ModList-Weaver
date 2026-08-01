@@ -1,6 +1,7 @@
 """FastAPI REST 接口定义
 
 接口列表：
+  GET  /api/version              当前软件版本 + 版本历史（Changelog）
   POST /api/scan_mods            扫描 mods 目录，返回模组列表 + project_id 反查结果
   POST /api/export_json          生成 HMCL 兼容 modlist 并保存本地
   POST /api/download_from_list   读取 modlist 启动批量下载（进入下载队列）
@@ -42,7 +43,103 @@ from .downloader import (
 )
 from .settings import init_settings, get_settings
 
-app = FastAPI(title="ModList-Weaver API", docs_url=None, redoc_url=None)
+# ============================================================
+# 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
+# 每次大版本发布更新此处，前端会通过 /api/version 自动显示
+# ============================================================
+CURRENT_VERSION = "3.0.0"
+APP_TITLE = "ModList-Weaver"
+
+# 软件内 Changelog（与前端 G 页保持一致的结构化历史）
+# 新增版本直接在头部插入，date 格式 YYYY-MM
+CHANGELOG = [
+    {
+        "version": "3.0.0",
+        "date": "2026-08",
+        "title": "断点续传 + CurseForge 双源 + 自动化 CI/CD",
+        "items": [
+            "【断点续传】下载中断后保留 .part 临时文件，HTTP Range 请求从断点续传，避免重复下载浪费带宽（Modrinth / CurseForge 双客户端一致实现）。",
+            "【CurseForge 双源支持】新增独立 CurseForge 客户端：murmur2 指纹匹配、项目搜索、版本列表、依赖递归、文件下载、服务端 429 速率节流自适应。",
+            "【多源自动路由】settings.source = auto / modrinth / curseforge；扫描阶段 Modrinth sha512 未命中时自动 fallback CurseForge murmur2，识别率显著提升。",
+            "【多算法哈希校验】优先级自适应：sha512 > sha1 > murmur2，按源 API 返回的可用字段选择最可靠的校验方案。",
+            "【pytest 单测 29/29 PASS】新增 tests/ 三套用例：scanner 哈希与 jar 解析、downloader 版本选择/TaskGate/限速器/哈希策略、CurseForge murmur2 + Settings 持久化边界。",
+            "【GitHub Actions CI/CD】push/PR：2 OS × 3 Python 跑单测矩阵；main/master/v* tag：PyInstaller 自动打 Windows 包；打 v* 正式 tag：自动上传 .zip 到 GitHub Release 并生成发布说明。",
+            "【工程化】build.spec 补 backend.*、hashlib 等 hiddenimports；requirements.txt 加入 pytest 开发依赖；.gitignore 补 build/ dist/ .pytest_cache/。",
+        ],
+    },
+    {
+        "version": "2.5",
+        "date": "2026-07",
+        "title": "交互细节与 UI 稳定性",
+        "items": [
+            "修复批量下载勾选模组后「下一步：目标配置」按钮无响应的问题。",
+            "修复任务 / 历史列表删除按钮缺少图标的问题（并补上「继续」按钮图标）。",
+            "结算页信息卡片重新排版：「任务」「保存目录」「清单文件」独占整行，长文本不再挤压错位。",
+            "进入结算页新增淡入上滑过渡动画。",
+        ],
+    },
+    {
+        "version": "2.4",
+        "date": "2026-06",
+        "title": "设置页 · 主题 · 四步下载向导",
+        "items": [
+            "新增「设置」页：最大并发下载数（默认 3）与全局网速限制，可热更新即时生效。",
+            "支持明暗主题，顶栏一键切换，偏好持久化。",
+            "批量下载改为四步向导：新增清单预览与勾选步骤，可按需选择下载模组。",
+            "任务详情改为双进度条：总任务进度 + 当前文件进度。",
+            "结算页合并失败 / 缺失为统一列表，按类型着色并标注原因，支持「查找类似」。",
+            "模组详情版本列表支持折叠展开更新日志。",
+            "精简各处说明性文字，界面更聚焦。",
+        ],
+    },
+    {
+        "version": "2.2",
+        "date": "2026-05",
+        "title": "任务持久化 · 结算页 · 更新日志页",
+        "items": [
+            "「批量下载」改为三步向导，「模组列表」去除步骤编号。",
+            "所有版本输入改为下拉选择（读取 Minecraft 官方版本列表）。",
+            "任务中心拆分为「进行中 / 已完成」：终态任务持久化本机，重启不丢失。",
+            "日志不再内嵌刷新，改为「查看日志 / 导出日志」，日志归档于 cache/logs。",
+            "新增任务结算页：查看失败 / 缺失明细、重试、打开源 / 目标目录。",
+            "新增独立「更新日志」页；「关于」改为独立分类并展示作者头像。",
+            "修复任务中心删除按钮显示异常、面包屑根节点固定不变等问题。",
+        ],
+    },
+    {
+        "version": "2.1",
+        "date": "2026-05",
+        "title": "模组列表 · 单模组下载 · 关于页",
+        "items": [
+            "合并「搜索 & 单模组」与「模组详情」为「模组列表」页，分页展示，支持筛选与搜索。",
+            "模组详情页新增一键下载（含 required 前置依赖）。",
+            "新增「关于」页面，展示本软件更新日志与作者信息。",
+        ],
+    },
+    {
+        "version": "2.0",
+        "date": "2026-04",
+        "title": "下载队列 · 任务中心 · 扫描向导",
+        "items": [
+            "新增下载队列：排队执行，支持暂停、继续、停止与删除。",
+            "新增模组详情页（图标、版本、作者、简介）。",
+            "扫描导出改为三步向导，支持勾选自定义导出，未识别模组标灰置顶。",
+            "任务中心重新排版，长文件名友好展示。",
+        ],
+    },
+    {
+        "version": "1.0",
+        "date": "2026-04",
+        "title": "MVP 首发：扫描 → 导出 → 批量下载",
+        "items": [
+            "扫描 mods 目录并通过文件哈希反查 Modrinth 项目。",
+            "导出 HMCL 兼容 modlist.json。",
+            "批量 / 单模组下载（自动解析 required 前置依赖）。",
+        ],
+    },
+]
+
+app = FastAPI(title=f"{APP_TITLE} API", docs_url=None, redoc_url=None)
 
 
 def _resolve_frontend_dir():
@@ -89,6 +186,18 @@ async def index():
 async def about():
     """"关于"页面：与首页共用同一前端资源"""
     return FileResponse(str(_FRONTEND_DIR / "index.html"))
+
+
+@app.get("/api/version")
+async def api_version():
+    """返回当前软件版本、App 标题、完整版本历史（软件内「更新日志」页自动渲染）"""
+    return {
+        "title": APP_TITLE,
+        "version": CURRENT_VERSION,
+        "display": f"{APP_TITLE} v{CURRENT_VERSION}",
+        "changelog": CHANGELOG,
+        "release_download": f"https://github.com/JonathanSssst/{APP_TITLE}/releases/tag/v{CURRENT_VERSION}",
+    }
 
 
 # ==================== MC 版本列表（下拉框） ====================

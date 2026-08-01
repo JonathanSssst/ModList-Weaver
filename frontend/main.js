@@ -1518,6 +1518,10 @@ async function loadSettings() {
         if (rate) rate.value = s.rate_limit_mbps ?? 0;
         const theme = document.getElementById("setTheme");
         if (theme) theme.value = s.theme || "auto";
+        const src = document.getElementById("setSource");
+        if (src) src.value = s.source || "auto";
+        const cfk = document.getElementById("setCfKey");
+        if (cfk) cfk.value = s.curseforge_api_key || "";
         if (s.theme) applyTheme(s.theme);
         const saved = document.getElementById("settingsSaved");
         if (saved) saved.textContent = "";
@@ -1529,9 +1533,12 @@ document.getElementById("btnSaveSettings").addEventListener("click", async () =>
         max_concurrency: parseInt(document.getElementById("setConcurrency").value, 10) || 3,
         rate_limit_mbps: parseFloat(document.getElementById("setRateLimit").value) || 0,
         theme: document.getElementById("setTheme").value,
+        source: document.getElementById("setSource").value || "auto",
+        curseforge_api_key: (document.getElementById("setCfKey").value || "").trim(),
     };
     if (patch.max_concurrency < 1) patch.max_concurrency = 1;
     if (patch.rate_limit_mbps < 0) patch.rate_limit_mbps = 0;
+    if (!["auto", "modrinth", "curseforge"].includes(patch.source)) patch.source = "auto";
     const btn = document.getElementById("btnSaveSettings");
     btn.disabled = true;
     try {
@@ -1555,3 +1562,38 @@ setStatus("就绪");
 loadMcVersions();
 startQueuePoll();
 loadSettings();
+// 从后端拉取真实版本号覆盖静态显示（单一事实来源 backend.api.CURRENT_VERSION）
+// 并缓存 changelog 供「更新日志」页渲染
+(async function bootstrapVersion() {
+    try {
+        const v = await getJSON(`${API}/version`);
+        if (!v) return;
+        const ver = v.version || "";
+        // 侧边栏
+        const sbSub = document.querySelector(".sb-sub");
+        if (sbSub && ver) sbSub.textContent = `模组迁移工具 v${ver}`;
+        // 关于页
+        const aboutVer = document.querySelector(".about-ver");
+        if (aboutVer && ver) aboutVer.textContent = `版本 v${ver}`;
+        const aboutDesc = document.querySelector(".about-desc");
+        if (aboutDesc) {
+            aboutDesc.textContent = "Minecraft 双源（Modrinth + CurseForge）模组迁移工具：扫描旧版本 mods 目录、导出 HMCL 兼容清单、批量 / 单模组下载。";
+        }
+        // 浏览器标题
+        if (v.display) document.title = `${v.display} · Minecraft 双源模组迁移工具`;
+        // 更新日志页：若后端返回 changelog 则渲染（静态 HTML 中已经有 V3.0 条目，这里做一致性覆盖）
+        if (Array.isArray(v.changelog) && v.changelog.length) {
+            const root = document.getElementById("changelogRoot");
+            if (root) {
+                root.innerHTML = v.changelog.map((c, idx) => `
+                    <div class="cl-item" ${idx === 0 ? 'style="border-left-color:var(--primary);background:linear-gradient(90deg,rgba(86,122,255,.08),transparent 60%);padding:10px 16px 14px 16px;border-radius:8px"' : ''}>
+                        <span class="cl-ver">v${c.version || ''}</span>
+                        ${c.date ? `<div class="cl-date">${c.date}${idx === 0 ? ' · 最新正式版' : ''}</div>` : ''}
+                        ${c.title ? `<div class="cl-title">${c.title}</div>` : ''}
+                        <ul class="cl-list">${(c.items || []).map(i => `<li>${i}</li>`).join('')}</ul>
+                    </div>
+                `).join('');
+            }
+        }
+    } catch (_) {}
+})();

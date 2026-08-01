@@ -6,6 +6,8 @@
   3. 等待服务就绪
   4. 启动 pywebview 窗口访问 http://127.0.0.1:port（内嵌网页，不弹浏览器）
   5. 关闭窗口时随主进程退出（uvicorn 线程为 daemon）
+
+版本号与 changelog 单一事实来源位于 backend.api:CURRENT_VERSION / CHANGELOG
 """
 import os
 import socket
@@ -54,6 +56,13 @@ def wait_for_server(url, timeout=20):
 
 
 def main():
+    # 版本号 / 标题：单一事实来源 backend.api.CURRENT_VERSION
+    try:
+        from backend.api import CURRENT_VERSION, APP_TITLE
+    except Exception:
+        CURRENT_VERSION = "0.0.0"
+        APP_TITLE = "ModList-Weaver"
+
     port = find_free_port()
     url = f"http://127.0.0.1:{port}/"
 
@@ -68,7 +77,7 @@ def main():
 
     # 启动 pywebview 桌面窗口（内嵌网页，不会弹出系统浏览器）
     webview.create_window(
-        title="ModList-Weaver · Modrinth 模组迁移工具",
+        title=f"{APP_TITLE} v{CURRENT_VERSION} · Minecraft 双源模组迁移工具",
         url=url,
         width=1200,
         height=840,
