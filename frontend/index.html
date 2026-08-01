@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ModList-Weaver v3.2.1 · Minecraft 双源模组迁移工具</title>
+    <title>ModList-Weaver v3.3.0 · Minecraft 双源模组迁移工具</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -22,7 +22,7 @@
                 </div>
                 <div class="sidebar-brand-text">
                     <div class="sb-title">ModList-Weaver</div>
-                    <div class="sb-sub">模组迁移工具 v3.2.1</div>
+                    <div class="sb-sub">模组迁移工具 v3.3.0</div>
                 </div>
             </div>
 
@@ -67,6 +67,18 @@
                     </span>
                     <span class="nav-label">模组列表</span>
                     <span class="nav-badge">C</span>
+                </a>
+
+                <!-- E：本地模组管理（V3.3） -->
+                <a href="#" class="nav-item" data-page="pageE">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/>
+                            <line x1="9" y1="12" x2="15" y2="12"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">本地模组</span>
+                    <span class="nav-badge">E</span>
                 </a>
 
                 <div class="nav-group-title">运维</div>
@@ -631,6 +643,105 @@
                     </div>
                 </section>
 
+                <!-- ==================== 页面 E：本地模组管理（V3.3） ==================== -->
+                <section class="page" id="pageE">
+                    <div class="page-head">
+                        <div>
+                            <h2 class="page-title">本地模组管理</h2>
+                        </div>
+                        <div class="page-stats">
+                            <div class="stat-card stat-total">
+                                <div class="stat-num" id="manTotal">0</div>
+                                <div class="stat-label">模组总数</div>
+                            </div>
+                            <div class="stat-card stat-ok">
+                                <div class="stat-num" id="manActive">0</div>
+                                <div class="stat-label">已启用</div>
+                            </div>
+                            <div class="stat-card stat-warn">
+                                <div class="stat-num" id="manDisabled">0</div>
+                                <div class="stat-label">已禁用</div>
+                            </div>
+                            <div class="stat-card stat-skip">
+                                <div class="stat-num" id="manUpdates">0</div>
+                                <div class="stat-label">有更新</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">1</span> 选择 mods 目录并扫描</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row form-row-grid">
+                                <div class="form-field form-field-2col">
+                                    <label>mods 目录路径</label>
+                                    <div class="input-group">
+                                        <input type="text" id="manFolder" class="input" placeholder="选择本地 mods 目录（支持 .disabled 禁用文件）" />
+                                        <button class="btn btn-outline" id="btnBrowseMan">浏览文件夹</button>
+                                    </div>
+                                </div>
+                                <div class="form-field">
+                                    <label>目标游戏版本（更新用）</label>
+                                    <input type="text" id="manMc" class="input" list="mcVersionsList" placeholder="如 1.21.1" />
+                                </div>
+                                <div class="form-field">
+                                    <label>目标加载器</label>
+                                    <select id="manLoader" class="input">
+                                        <option value="fabric">Fabric</option>
+                                        <option value="forge">Forge</option>
+                                        <option value="neoforge">NeoForge</option>
+                                        <option value="quilt">Quilt</option>
+                                    </select>
+                                </div>
+                                <div class="form-field form-field-actions">
+                                    <button class="btn btn-primary" id="btnManScan">扫描目录</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">2</span> 已安装模组</div>
+                            <span class="ch-hint" id="manInfo">—</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="mod-toolbar">
+                                <div class="mt-left">
+                                    <button class="btn btn-outline btn-sm" id="btnManAll">全选</button>
+                                    <button class="btn btn-outline btn-sm" id="btnManNone">清空</button>
+                                    <button class="btn btn-outline btn-sm" id="btnManInvert">反选</button>
+                                    <button class="btn btn-outline btn-sm" id="btnManDisable">禁用选中</button>
+                                    <button class="btn btn-outline btn-sm" id="btnManEnable">启用选中</button>
+                                    <button class="btn btn-outline btn-sm btn-danger" id="btnManDelete">删除选中</button>
+                                    <span class="mt-hint">已选 <b id="manSelCount">0</b> / <span id="manSelTotal">0</span></span>
+                                </div>
+                                <div class="mt-right">
+                                    <button class="btn btn-outline btn-sm" id="btnManCheckUpdates" title="检测已识别模组是否有新版本">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                                        </svg>
+                                        检查更新
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" id="btnManUpdate" disabled>一键更新</button>
+                                    <span class="mt-hint" id="manUpdateCount"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body no-pad">
+                            <div class="mod-list" id="manList">
+                                <div class="empty-state compact">
+                                    <div class="empty-state-title">请先选择目录并扫描</div>
+                                    <div class="empty-state-desc">扫描后可按需启用 / 禁用 / 删除模组，或一键检查更新。</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- ==================== 页面 D：任务中心 ==================== -->
                 <section class="page" id="pageD">
 
@@ -763,7 +874,7 @@
                                 </div>
                                 <div class="about-hero-main">
                                     <div class="about-name">ModList-Weaver</div>
-                                    <div class="about-ver">版本 v3.2.1</div>
+                                    <div class="about-ver">版本 v3.3.0</div>
                                     <div class="about-desc">Minecraft 双源（Modrinth + CurseForge）模组迁移工具：扫描旧版本 mods 目录、导出 modlist.json、批量 / 单模组下载。</div>
                                     <div class="about-update-row">
                                         <button class="btn btn-outline btn-sm" id="btnCheckAppUpdate">检查更新</button>
@@ -796,10 +907,26 @@
                             <div class="changelog-section" id="changelogRoot">
                                 <div class="cl-item cl-fold" data-open="1">
                                     <div class="cl-head" role="button" title="点击展开/收起">
-                                        <span class="cl-ver">v3.2.1</span>
+                                        <span class="cl-ver">v3.3.0</span>
                                         <span class="cl-fold-hint">▾</span>
                                     </div>
                                     <div class="cl-date">2026-08 · 最新正式版</div>
+                                    <div class="cl-fold-body">
+                                        <div class="cl-title">一键更新已安装模组 · 本地 mods 目录管理</div>
+                                        <ul class="cl-list">
+                                            <li><b>【一键更新】</b>新增「本地模组」页：扫描本地 mods 目录后一键检查更新，批量下载最新适配版本并自动移除旧文件，原禁用模组更新后保持禁用状态。</li>
+                                            <li><b>【本地目录管理】</b>支持启用 / 禁用（.disabled 后缀）/ 删除 / 打开源页面 / 查看详情，未识别模组标灰展示。</li>
+                                            <li><b>【更新任务】</b>任务中心新增「模组更新」任务类型，纳入队列 / 进度 / 结算 / 断点恢复体系。</li>
+                                            <li><b>【工程化】</b>新增 /api/manage_scan、/api/manage_mod、/api/download_updates 三个接口。</li>
+                                            <li><b>【测试】</b>新增 tests/test_manage_v33.py，pytest 全绿。</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v3.2.1</span>
+                                        <span class="cl-fold-hint">▸</span>
+                                    </div>
                                     <div class="cl-fold-body">
                                         <div class="cl-title">更新应用图标样式</div>
                                         <ul class="cl-list">

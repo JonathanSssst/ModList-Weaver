@@ -152,6 +152,7 @@ const PAGE_TITLES = {
     pageA: "扫描 & 导出清单",
     pageB: "批量下载模组",
     pageC: "模组列表",
+    pageE: "本地模组",
     pageD: "任务中心",
     pageF: "关于",
     pageH: "设置",
@@ -162,6 +163,7 @@ const PAGE_GROUP = {
     pageA: "工作流",
     pageB: "工作流",
     pageC: "工作流",
+    pageE: "工作流",
     pageD: "运维",
     pageF: "更多",
     pageH: "更多",
@@ -182,6 +184,8 @@ const state = {
     logModalTimer: null,
     updateMap: {},        // project_id -> 更新信息（检查更新结果，V3.1）
     wasDownloading: false, // 是否有任务进行中（完成通知判定，V3.2）
+    manMods: [],          // 本地模组管理（页面 E）：扫描结果（V3.3）
+    manUpdateMap: {},     // 页面 E：project_id -> 更新信息（V3.3）
 };
 
 // 模组列表页（页面 C）：搜索状态
@@ -236,6 +240,13 @@ function switchPage(pageId) {
         showCView(state.catDetail ? "detail" : "list");
         // 首次进入自动分页浏览模组目录
         if (!state.catDetail && !catalogState.loaded) searchCatalog(1);
+    }
+    if (pageId === "pageE") {
+        // 预填目标版本 / 加载器（V3.3：本地模组管理）
+        const mc = document.getElementById("manMc");
+        const ldr = document.getElementById("manLoader");
+        if (mc && !mc.value) mc.value = pref.mc || "";
+        if (ldr) ldr.value = pref.loader || "fabric";
     }
     if (pageId === "pageD") {
         showQueueView(state.settleTaskId ? "settle" : "list");
@@ -1072,6 +1083,240 @@ document.getElementById("modDetail").addEventListener("click", async (e) => {
 });
 
 // ================================================================
+// 页面 E：本地模组管理（V3.3）——扫描 / 启用 / 禁用 / 删除 / 检查更新 / 一键更新
+// ================================================================
+document.getElementById("btnBrowseMan").addEventListener("click", async () => {
+    const data = await getJSON(`${API}/pick_folder?title=选择本地 mods 目录`);
+    if (data.folder) document.getElementById("manFolder").value = data.folder;
+});
+
+document.getElementById("btnManScan").addEventListener("click", scanInstalledMods);
+
+async function scanInstalledMods() {
+    const folder = document.getElementById("manFolder").value.trim();
+    if (!folder) { toast("请先选择 mods 目录", "err"); return; }
+    const btn = document.getElementById("btnManScan");
+    btn.disabled = true;
+    setStatus("扫描中…", "busy");
+    try {
+        const data = await postJSON(`${API}/manage_scan`, { folder });
+        state.manMods = (data.mods || []).map((m, i) => Object.assign(m, { _idx: i, selected: false }));
+        state.manUpdateMap = {};
+        const active = state.manMods.filter(m => !m.disabled).length;
+        document.getElementById("manTotal").textContent = state.manMods.length;
+        document.getElementById("manActive").textContent = active;
+        document.getElementById("manDisabled").textContent = state.manMods.length - active;
+        document.getElementById("manUpdates").textContent = 0;
+        document.getElementById("btnManUpdate").disabled = true;
+        const cnt = document.getElementById("manUpdateCount");
+        if (cnt) cnt.textContent = "";
+        renderManList();
+        setStatus("就绪");
+        toast(`扫描完成：${data.matched}/${data.total} 已识别`, "ok");
+    } catch (e) {
+        setStatus("就绪");
+        toast("扫描失败：" + e.message, "err");
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function renderManList() {
+    const box = document.getElementById("manList");
+    const mods = state.manMods;
+    const info = document.getElementById("manInfo");
+    if (info) info.textContent = mods.length ? `共 ${mods.length} 个模组文件` : "—";
+    if (!mods.length) {
+        box.innerHTML = `
+            <div class="empty-state compact">
+                <div class="empty-state-title">目录中没有模组文件</div>
+                <div class="empty-state-desc">支持 jar 与 jar.disabled（已禁用）文件。</div>
+            </div>`;
+        updateManCount();
+        return;
+    }
+    box.innerHTML = mods.map(m => {
+        const cls = m.disabled ? "disabled" : (m.matched ? "" : "unmatched");
+        const stateBadge = m.disabled
+            ? `<span class="m-badge off">已禁用</span>`
+            : `<span class="m-badge ok">已启用</span>`;
+        const upd = m.matched ? state.manUpdateMap[m.project_id] : null;
+        const updBadge = upd
+            ? `<span class="m-badge upd" title="当前 ${escapeHtml(upd.current_version)} → 最新 ${escapeHtml(upd.latest_version)}${upd.changelog ? "\n" + escapeHtml(upd.changelog) : ""}">有更新 ${escapeHtml(upd.latest_version)}</span>`
+            : `<span class="m-badge no" style="visibility:hidden">有更新</span>`;
+        const pid = m.project_id
+            ? `<span class="m-pid">${m.project_id}</span>`
+            : `<span class="m-pid">本地模组</span>`;
+        const name = (m.metadata && (m.metadata.name || m.metadata.mod_id)) || m.filename;
+        const checked = m.selected ? "checked" : "";
+        return `<div class="mod-item ${cls}">
+            <input type="checkbox" class="m-check" ${checked} data-idx="${m._idx}" />
+            <span class="m-name" title="${escapeHtml(m.filename)}">${escapeHtml(name)}</span>
+            ${pid}
+            <span class="m-pid">${escapeHtml((m.metadata && m.metadata.loader) || "?")}</span>
+            ${stateBadge}
+            ${updBadge}
+            <span class="m-size">${formatBytes(m.size)}</span>
+            <span class="m-open">
+                ${m.matched ? `<button class="m-ext" title="打开源页面" data-ext="${escapeHtml(m.project_id)}" data-src="${escapeHtml(m.source || "")}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                </button>` : ""}
+                ${m.matched ? `<button class="q-btn btn-text man-open" data-pid="${escapeHtml(m.project_id)}" title="查看详情">查看</button>` : ""}
+            </span>
+        </div>`;
+    }).join("");
+    box.querySelectorAll(".m-check").forEach(cb => {
+        cb.addEventListener("change", () => {
+            state.manMods[Number(cb.dataset.idx)].selected = cb.checked;
+            updateManCount();
+        });
+    });
+    updateManCount();
+}
+
+function updateManCount() {
+    const sel = state.manMods.filter(m => m.selected).length;
+    const selEl = document.getElementById("manSelCount");
+    if (selEl) selEl.textContent = sel;
+    const totalEl = document.getElementById("manSelTotal");
+    if (totalEl) totalEl.textContent = state.manMods.length;
+}
+
+document.getElementById("manList").addEventListener("click", (e) => {
+    const ext = e.target.closest(".m-ext");
+    if (ext) {
+        e.stopPropagation();
+        openSourcePage(ext.dataset.ext, ext.dataset.src);
+        return;
+    }
+    const dt = e.target.closest(".man-open");
+    if (dt) {
+        e.stopPropagation();
+        openDetail(dt.dataset.pid);
+    }
+});
+
+// ---------- 批量选中操作：全选 / 清空 / 反选 ----------
+document.getElementById("btnManAll").addEventListener("click", () => {
+    state.manMods.forEach(m => { m.selected = true; });
+    renderManList();
+});
+document.getElementById("btnManNone").addEventListener("click", () => {
+    state.manMods.forEach(m => { m.selected = false; });
+    renderManList();
+});
+document.getElementById("btnManInvert").addEventListener("click", () => {
+    state.manMods.forEach(m => { m.selected = !m.selected; });
+    renderManList();
+});
+
+// ---------- 启用 / 禁用 / 删除 ----------
+async function batchManAction(action) {
+    const sel = state.manMods.filter(m => m.selected);
+    if (!sel.length) { toast("请先勾选模组", "err"); return; }
+    const folder = document.getElementById("manFolder").value.trim();
+    if (!folder) { toast("缺少 mods 目录", "err"); return; }
+    const label = { disable: "禁用", enable: "启用", delete: "删除" }[action] || action;
+    let ok = 0, fail = 0;
+    for (const m of sel) {
+        try {
+            await postJSON(`${API}/manage_mod`, { folder, filename: m.filename, action });
+            ok++;
+        } catch (e) {
+            fail++;
+            toast(`${label}失败：${m.filename} ${e.message}`, "err");
+        }
+    }
+    toast(`已${label} ${ok} 个模组${fail ? `，失败 ${fail} 个` : ""}`, fail ? "warn" : "ok");
+    await scanInstalledMods();
+}
+
+document.getElementById("btnManDisable").addEventListener("click", () => batchManAction("disable"));
+document.getElementById("btnManEnable").addEventListener("click", () => batchManAction("enable"));
+document.getElementById("btnManDelete").addEventListener("click", () => {
+    const sel = state.manMods.filter(m => m.selected).length;
+    if (!sel) { toast("请先勾选模组", "err"); return; }
+    if (!confirm(`确认删除选中的 ${sel} 个模组文件？此操作不可恢复。`)) return;
+    batchManAction("delete");
+});
+
+// ---------- 检查更新（复用 /api/check_updates） ----------
+document.getElementById("btnManCheckUpdates").addEventListener("click", checkInstalledUpdates);
+
+async function checkInstalledUpdates() {
+    const mods = state.manMods
+        .filter(m => m.matched && m.project_id && !m.disabled)
+        .map(m => ({
+            project_id: m.project_id,
+            version_id: m.version_id,
+            version_number: m.version_number,
+            version_name: m.version_name,
+            source: m.source,
+            name: (m.metadata && (m.metadata.name || m.metadata.mod_id)) || m.filename,
+        }));
+    if (!mods.length) { toast("没有可检测的已识别模组", "err"); return; }
+    const btn = document.getElementById("btnManCheckUpdates");
+    if (btn) { btn.disabled = true; btn.textContent = "检测中…"; }
+    try {
+        const mc = document.getElementById("manMc").value.trim() || null;
+        const loader = document.getElementById("manLoader").value;
+        const data = await postJSON(`${API}/check_updates`, { mods, mc_version: mc, loader });
+        state.manUpdateMap = {};
+        (data.updates || []).forEach(u => { state.manUpdateMap[u.project_id] = u; });
+        renderManList();
+        const n = data.update_count || 0;
+        document.getElementById("manUpdates").textContent = n;
+        const cnt = document.getElementById("manUpdateCount");
+        if (cnt) cnt.textContent = n ? `${n} 个可更新` : "全部最新";
+        document.getElementById("btnManUpdate").disabled = !n;
+        toast(n ? `发现 ${n} 个模组可更新` : "所有已识别模组均是最新版本", n ? "" : "ok");
+    } catch (e) {
+        toast("检查更新失败：" + e.message, "err");
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = "检查更新"; }
+    }
+}
+
+// ---------- 一键更新（/api/download_updates） ----------
+document.getElementById("btnManUpdate").addEventListener("click", downloadInstalledUpdates);
+
+async function downloadInstalledUpdates() {
+    const mc = document.getElementById("manMc").value.trim();
+    const loader = document.getElementById("manLoader").value;
+    const saveDir = document.getElementById("manFolder").value.trim();
+    if (!mc) { toast("请填写目标游戏版本", "err"); return; }
+    if (!saveDir) { toast("请选择 mods 目录", "err"); return; }
+    const updates = Object.values(state.manUpdateMap).map(u => {
+        const m = state.manMods.find(x => x.project_id === u.project_id);
+        return {
+            project_id: u.project_id,
+            name: u.name || (m ? ((m.metadata && (m.metadata.name || m.metadata.mod_id)) || m.filename) : u.project_id),
+            source: u.source || "auto",
+            old_filename: m ? m.filename : "",
+        };
+    });
+    if (!updates.length) { toast("没有可更新的模组", "err"); return; }
+    if (!confirm(`确认更新 ${updates.length} 个模组？\n将下载最新适配版本并移除旧文件。`)) return;
+    const btn = document.getElementById("btnManUpdate");
+    btn.disabled = true;
+    try {
+        const data = await postJSON(`${API}/download_updates`, {
+            updates, mc_version: mc, loader, save_dir: saveDir,
+        });
+        toast(data.queued ? "更新任务已加入队列" : "模组更新已启动", "ok");
+        switchPage("pageD");
+    } catch (e) {
+        toast("启动更新失败：" + e.message, "err");
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ================================================================
 // 页面 D：任务中心（进行中 / 已完成 + 结算页 + 日志弹窗）
 // ================================================================
 const STATUS_META = {
@@ -1112,7 +1357,14 @@ function qbtn(action, tid, extraCls) {
 
 function taskTitle(t) {
     if (t.kind === "batch") return "批量下载";
+    if (t.kind === "update") return "模组更新" + (t.mc_version ? ` ${t.mc_version}/${t.loader}` : "");
     return "单模组下载" + (t.mc_version ? ` ${t.mc_version}/${t.loader}` : "");
+}
+
+function taskKindLabel(kind) {
+    if (kind === "batch") return "批量";
+    if (kind === "update") return "更新";
+    return "单个";
 }
 
 function formatDuration(sec) {
@@ -1170,7 +1422,7 @@ function renderActiveTasks(tasks) {
         const sub = subtaskText(t);
         return `<div class="queue-item${active}" data-tid="${t.task_id}">
             <div class="q-top">
-                <span class="q-kind ${t.kind}">${t.kind === "batch" ? "批量" : "单个"}</span>
+                <span class="q-kind ${t.kind}">${taskKindLabel(t.kind)}</span>
                 <span class="q-status st-${st.cls}">${st.label}</span>
                 <span class="q-title">${escapeHtml(taskTitle(t))}</span>
                 ${pos}
@@ -1231,7 +1483,7 @@ function renderHistoryTasks(history) {
         const src = h.source ? dirOf(h.source) : "";
         return `<div class="h-item" data-tid="${h.task_id}">
             <div class="q-top">
-                <span class="q-kind ${h.kind}">${h.kind === "batch" ? "批量" : "单个"}</span>
+                <span class="q-kind ${h.kind}">${taskKindLabel(h.kind)}</span>
                 <span class="q-status st-${meta.cls}">${meta.label}</span>
                 <span class="q-title">${escapeHtml(taskTitle(h))}</span>
                 <span class="q-spacer"></span>
@@ -1357,7 +1609,7 @@ function renderSettlement(h) {
     const st = h;
     const meta = STATUS_META[st.status] || { label: st.status, cls: "pending" };
     document.getElementById("settleTitle").textContent =
-        (st.kind === "batch" ? "批量下载" : "单模组下载") + " · 任务结算";
+        taskTitle(st) + " · 任务结算";
 
     const failed = st.failed || [];
     const missing = st.missing || [];

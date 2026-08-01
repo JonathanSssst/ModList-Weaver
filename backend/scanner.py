@@ -105,7 +105,7 @@ def parse_jar_metadata(jar_path):
     return info
 
 
-async def scan_mods(folder, client, cf_client=None, log_cb=None):
+async def scan_mods(folder, client, cf_client=None, log_cb=None, include_disabled=False):
     """扫描 mods 目录，解析元数据并通过多平台哈希反查 project_id
 
     匹配顺序（符合 settings.source=auto 行为）：
@@ -116,13 +116,20 @@ async def scan_mods(folder, client, cf_client=None, log_cb=None):
     :param client: ModrinClient 实例
     :param cf_client: 可选 CurseForgeClient 实例
     :param log_cb: 可选异步日志回调 async cb(msg)
+    :param include_disabled: 是否包含 *.jar.disabled（已禁用）文件（V3.3 本地管理用）
     :return: 模组信息列表
     """
     folder_path = Path(folder)
     if not folder_path.is_dir():
         raise FileNotFoundError(f"目录不存在或不是文件夹: {folder}")
 
-    jar_files = sorted(folder_path.glob("*.jar"))
+    if include_disabled:
+        # 已启用在前、已禁用在后，各自按文件名排序
+        jar_files = sorted(
+            set(folder_path.glob("*.jar")) | set(folder_path.glob("*.jar.disabled")),
+            key=lambda p: (p.name.endswith(".disabled"), p.name))
+    else:
+        jar_files = sorted(folder_path.glob("*.jar"))
     if not jar_files:
         return []
 
@@ -144,6 +151,7 @@ async def scan_mods(folder, client, cf_client=None, log_cb=None):
             "murmur2": murmur2,
             "size": jar.stat().st_size,
             "metadata": meta,
+            "disabled": jar.name.endswith(".jar.disabled"),
             "matched": False,
             "source": None,          # "modrinth" / "curseforge"
             "project_id": None,

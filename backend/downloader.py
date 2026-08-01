@@ -658,13 +658,15 @@ def _compute_local_hash(dest_path, algo):
 
 
 async def _resolve_and_download(mr_client, cf_client, project_id, mc_version, loader, save_dir,
-                                processed, task_state, gate, depth=0, force_source=None):
+                                processed, task_state, gate, depth=0, force_source=None,
+                                old_filename=None):
     """递归解析并下载模组及其 required 依赖（多源版本）
 
     :param mr_client: ModrinthClient
     :param cf_client: CurseForgeClient
     :param force_source: None=按 settings.source 决定；modrinth=强制 Modrinth；
                          curseforge=强制 CurseForge；auto=依次尝试两个源
+    :param old_filename: 更新场景：旧的本地文件名（成功后删除；原为 .disabled 则保持禁用）
     """
     await gate.check()
     if project_id in processed:
@@ -755,6 +757,7 @@ async def _resolve_and_download(mr_client, cf_client, project_id, mc_version, lo
             if local and str(local).lower() == str(expected).lower():
                 task_state.add_log(f"{indent}[跳过] {filename} 已存在且校验通过，无需重新下载", "success")
                 task_state.add_skip(project_id, project_name, filename)
+                _cleanup_old_file(save_dir, old_filename, dest, task_state, indent)
                 await _download_dependencies(mr_client, cf_client, version, src_name, mc_version, loader,
                                              save_dir, processed, task_state, gate, depth, force_source=src_name)
                 resolved_any = True
@@ -788,6 +791,7 @@ async def _resolve_and_download(mr_client, cf_client, project_id, mc_version, lo
                     await cl.download_file(url, dest, **kwargs)
                 task_state.add_log(f"{indent}[成功] {filename}", "success")
                 task_state.add_success(project_id, project_name, filename)
+                _cleanup_old_file(save_dir, old_filename, dest, task_state, indent)
                 success = True
                 break
             except (ModrinthError, CurseForgeError, OSError) as e:
@@ -817,6 +821,32 @@ async def _resolve_and_download(mr_client, cf_client, project_id, mc_version, lo
         joined = "; ".join(last_reasons) if last_reasons else "未知原因"
         task_state.add_log(f"{indent}[失败] 所有源解析或下载失败: {project_id} — {joined}", "error")
         task_state.add_fail(project_id, project_name, f"多源失败: {joined}")
+
+
+def _cleanup_old_file(save_dir, old_filename, dest, task_state, indent=""):
+    """更新场景收尾：删除旧文件；旧文件为禁用状态（.disabled）时保持新文件禁用
+
+    :param dest: 本次下载/校验通过的最终文件路径
+    """
+    if not old_filename:
+        return
+    old = Path(save_dir) / old_filename
+    try:
+        if old.is_file() and old.resolve() != Path(dest).resolve():
+            old.unlink()
+            task_state.add_log(f"{indent}[更新] 已移除旧文件 {old_filename}", "success")
+    except OSError as e:
+        task_state.add_log(f"{indent}[警告] 移除旧文件失败: {e}", "warn")
+    # 旧文件被禁用 → 新文件保持禁用状态
+    if old_filename.endswith(".disabled") and not Path(dest).name.endswith(".disabled"):
+        disabled_dest = Path(dest).with_name(Path(dest).name + ".disabled")
+        try:
+            if disabled_dest.is_file():
+                disabled_dest.unlink()
+            Path(dest).rename(disabled_dest)
+            task_state.add_log(f"{indent}[更新] 保持禁用状态: {disabled_dest.name}", "info")
+        except OSError as e:
+            task_state.add_log(f"{indent}[警告] 保持禁用状态失败: {e}", "warn")
 
 
 async def _download_dependencies(mr_client, cf_client, version, src_name, mc_version, loader,
@@ -959,5 +989,59 @@ async def run_single_download(mr_client, project_id, mc_version, loader, save_di
     task_state.finished_at = time.time()
     task_state.add_log(
         f"[完成] 单模组下载结束。成功 {len(task_state.success) - task_state.skipped_count}，"
+        f"跳过 {task_state.skipped_count}，"
+        f"失败 {len(task_state.failed)}，缺失 {len(task_state.missing)}", "info")
+
+
+async def run_update_download(mr_client, cf_client, updates, mc_version, loader, save_dir,
+                              task_state, gate):
+    """批量更新已安装模组（V3.3）：下载最新适配版本并清理旧文件
+
+    每个更新项：{project_id, name, source, old_filename}
+    - 按项目所属源路由（modrinth / curseforge）
+    - 下载最新适配版本，成功后移除旧文件（原为 .disabled 时保持禁用状态）
+    - 自动解析 required 前置依赖
+    """
+    if cf_client is None:
+        cf_client = CurseForgeClient()
+    task_state.kind = "update"
+    task_state.mc_version = mc_version
+    task_state.loader = loader
+    task_state.save_dir = save_dir
+    task_state.source = "模组更新"
+    updates = [u for u in updates or [] if (u or {}).get("project_id")]
+    task_state.total = len(updates)
+    task_state.add_log(
+        f"[开始] 更新 {len(updates)} 个模组，目标 {mc_version}/{loader}", "info")
+
+    save_path = Path(save_dir)
+    try:
+        save_path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        task_state.add_log(f"[失败] 创建保存目录失败: {e}", "error")
+        task_state.status = "failed"
+        task_state.finished_at = time.time()
+        return
+
+    processed = set()
+    for i, u in enumerate(updates):
+        await gate.check()
+        pid = u.get("project_id")
+        src = (u.get("source") or "auto").lower()
+        old_filename = u.get("old_filename") or ""
+        task_state.done = i
+        task_state.add_log(
+            f"[更新] {u.get('name') or pid}（{src}）→ 最新适配版本", "info")
+        await _resolve_and_download(
+            mr_client, cf_client, pid, mc_version, loader, save_dir,
+            processed, task_state, gate,
+            force_source=src, old_filename=old_filename)
+
+    task_state.done = task_state.total
+    await _export_missing(task_state, save_dir)
+    task_state.status = "completed"
+    task_state.finished_at = time.time()
+    task_state.add_log(
+        f"[完成] 更新结束。成功 {len(task_state.success) - task_state.skipped_count}，"
         f"跳过 {task_state.skipped_count}，"
         f"失败 {len(task_state.failed)}，缺失 {len(task_state.missing)}", "info")

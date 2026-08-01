@@ -28,6 +28,9 @@
   POST /api/import_modlist       导入拖拽的 modlist.json 内容（V3.1）
   GET  /api/storage_info         缓存占用统计（日志/临时文件/历史，V3.2）
   POST /api/clear_cache          清理缓存：logs / dropped / history（V3.2）
+  POST /api/manage_scan          扫描 mods 目录（含 .disabled 禁用文件，V3.3）
+  POST /api/manage_mod           本地模组管理：启用 / 禁用 / 删除（V3.3）
+  POST /api/download_updates     一键更新已安装模组（V3.3）
 """
 import json
 import os
@@ -45,7 +48,7 @@ from .modrinth_client import ModrinthClient, ModrinthError
 from .curseforge_client import CurseForgeClient, CurseForgeError
 from .scanner import scan_mods
 from .downloader import (
-    TaskManager, run_batch_download, run_single_download,
+    TaskManager, run_batch_download, run_single_download, run_update_download,
     _pick_best_version, _pick_primary_from_version,
 )
 from .settings import init_settings, get_settings
@@ -54,12 +57,24 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.2.1"
+CURRENT_VERSION = "3.3.0"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.3.0",
+        "date": "2026-08",
+        "title": "一键更新已安装模组 · 本地 mods 目录管理",
+        "items": [
+            "【一键更新】新增「本地模组」页：扫描本地 mods 目录后一键检查更新，批量下载最新适配版本并自动移除旧文件，原禁用模组更新后保持禁用状态。",
+            "【本地目录管理】支持启用 / 禁用（.disabled 后缀）/ 删除 / 打开源页面 / 查看详情，未识别模组标灰展示，可直接进入模组列表页查看详情。",
+            "【更新任务】任务中心新增「模组更新」任务类型，纳入队列 / 进度 / 结算 / 断点恢复体系，失败与缺失可在结算页重试。",
+            "【工程化】scan_mods 支持 include_disabled 参数；/api/manage_scan、/api/manage_mod、/api/download_updates 三个新接口。",
+            "【测试】新增 tests/test_manage_v33.py（本地管理接口 + 一键更新），pytest 全绿。",
+        ],
+    },
     {
         "version": "3.2.1",
         "date": "2026-08",
@@ -235,6 +250,14 @@ def _build_task_factory(kind, params, state):
                 params.get("loader"), params.get("save_dir"), state, gate,
                 project_ids=params.get("project_ids"),
                 cf_client=cf_client, global_source=params.get("source"))
+        return _factory
+
+    if kind == "update":
+        async def _factory(gate):
+            return await run_update_download(
+                client, cf_client, params.get("updates") or [],
+                params.get("mc_version"), params.get("loader"),
+                params.get("save_dir"), state, gate)
         return _factory
 
     async def _factory(gate):
@@ -430,6 +453,19 @@ class DownloadListRequest(BaseModel):
     source: Optional[str] = None         # 强制下载源：modrinth / curseforge / auto(默认)
 
 
+class DownloadUpdatesRequest(BaseModel):
+    updates: list = []                   # [{project_id, name, source, old_filename}]
+    mc_version: str
+    loader: str
+    save_dir: str
+
+
+class ManageModRequest(BaseModel):
+    folder: str
+    filename: str
+    action: str                          # enable / disable / delete
+
+
 class SearchRequest(BaseModel):
     query: str
     game_version: Optional[str] = None
@@ -568,6 +604,68 @@ async def api_scan_mods(req: ScanRequest):
     }
 
 
+@app.post("/api/manage_scan")
+async def api_manage_scan(req: ScanRequest):
+    """扫描 mods 目录（含 .jar.disabled 禁用文件）用于本地管理（V3.3）
+
+    复用 scan_mods 的哈希反查逻辑，仅额外包含禁用文件并标记 disabled 字段。
+    """
+    if not req.folder or not Path(req.folder).is_dir():
+        raise HTTPException(status_code=400, detail=f"目录不存在: {req.folder}")
+    try:
+        results = await scan_mods(req.folder, client, cf_client, include_disabled=True)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except (ModrinthError, CurseForgeError) as e:
+        raise HTTPException(status_code=502, detail=f"下载源 API 错误: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"扫描失败: {e}")
+
+    matched = sum(1 for r in results if r["matched"])
+    return {
+        "total": len(results),
+        "matched": matched,
+        "unmatched": len(results) - matched,
+        "mods": results,
+    }
+
+
+@app.post("/api/manage_mod")
+def api_manage_mod(req: ManageModRequest):
+    """本地 mods 目录管理：启用 / 禁用 / 删除单个 jar 文件（V3.3）
+
+    - disable：foo.jar -> foo.jar.disabled
+    - enable：foo.jar.disabled -> foo.jar
+    - delete：物理删除文件
+    """
+    folder = Path(req.folder)
+    if not folder.is_dir():
+        raise HTTPException(status_code=400, detail=f"目录不存在: {req.folder}")
+    name = Path(req.filename or "").name  # 仅取文件名，防路径穿越
+    if not (name.endswith(".jar") or name.endswith(".jar.disabled")):
+        raise HTTPException(status_code=400, detail="仅支持 jar 模组文件")
+    src = folder / name
+    if not src.is_file():
+        raise HTTPException(status_code=404, detail=f"文件不存在: {name}")
+    action = (req.action or "").lower()
+    try:
+        if action == "disable":
+            if not name.endswith(".disabled"):
+                src.rename(folder / (name + ".disabled"))
+        elif action == "enable":
+            if name.endswith(".disabled"):
+                src.rename(folder / name[:-len(".disabled")])
+        elif action == "delete":
+            src.unlink()
+        else:
+            raise HTTPException(status_code=400, detail="action 必须是 enable / disable / delete")
+    except HTTPException:
+        raise
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"操作失败: {e}")
+    return {"ok": True, "filename": src.name}
+
+
 @app.post("/api/check_updates")
 async def api_check_updates(req: CheckUpdatesRequest):
     """检测已识别模组是否有新版本（V3.1）
@@ -690,6 +788,36 @@ async def api_download_from_list(req: DownloadListRequest):
             "save_dir": req.save_dir,
             "project_ids": req.project_ids,
             "source": req.source,
+        })
+    return {"task_id": tid, "queued": state.status != "running"}
+
+
+@app.post("/api/download_updates")
+async def api_download_updates(req: DownloadUpdatesRequest):
+    """一键更新已安装模组（V3.3）：下载最新适配版本并清理旧文件（入队）
+
+    updates 每个元素：{project_id, name, source, old_filename}
+    任务类型为 "update"，纳入队列 / 进度 / 结算 / 断点恢复体系。
+    """
+    if not req.mc_version or not req.loader:
+        raise HTTPException(status_code=400, detail="必须指定目标游戏版本与加载器")
+    if not req.save_dir:
+        raise HTTPException(status_code=400, detail="必须指定保存目录")
+    updates = [u for u in (req.updates or []) if (u or {}).get("project_id")]
+    if not updates:
+        raise HTTPException(status_code=400, detail="没有可更新的模组")
+
+    async def _factory(gate):
+        return await run_update_download(
+            client, cf_client, updates, req.mc_version, req.loader, req.save_dir, state, gate)
+
+    tid, state = await task_manager.create(
+        "update", _factory,
+        params={
+            "updates": updates,
+            "mc_version": req.mc_version,
+            "loader": req.loader,
+            "save_dir": req.save_dir,
         })
     return {"task_id": tid, "queued": state.status != "running"}
 
