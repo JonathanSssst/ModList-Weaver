@@ -47,12 +47,22 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.0.0"
+CURRENT_VERSION = "3.0.1"
 APP_TITLE = "ModList-Weaver"
 
-# 软件内 Changelog（与前端 G 页保持一致的结构化历史）
+# 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.0.1",
+        "date": "2026-08",
+        "title": "更新日志并入关于页 · 作者头像修复",
+        "items": [
+            "「更新日志」并入「关于」页面：关于页直接展示完整版本历史，最新版本默认展开，历史版本自动折叠，可点击版本号展开/收起。",
+            "侧边栏移除独立「更新日志」入口，导航更精简。",
+            "修复关于页作者头像无法显示的问题（静态资源路径指向错误，/src → /static/src）。",
+        ],
+    },
     {
         "version": "3.0.0",
         "date": "2026-08",

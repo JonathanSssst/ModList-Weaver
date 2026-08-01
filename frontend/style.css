@@ -1829,6 +1829,20 @@ select.input {
     line-height: 1.85;
 }
 .cl-list li::marker { color: var(--primary); }
+.cl-item.cl-fold .cl-head {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+}
+.cl-item.cl-fold[data-open="0"] .cl-fold-body { display: none; }
+.cl-fold-hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    transition: transform .2s ease;
+}
 
 /* V2.1 响应式微调 */
 @media (max-width: 960px) {

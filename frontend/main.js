@@ -2,7 +2,7 @@
  *
  * 架构：
  *   - 侧边栏：折叠状态 localStorage 持久化、事件委托双按钮
- *   - 导航：分组（工作流 A/B/C、运维 D、更多 F 关于 / G 更新日志 / H 设置）
+ *   - 导航：分组（工作流 A/B/C、运维 D、更多 F 关于 / G 设置）
  *   - 页面 A/B 为向导（B 为四步：清单 → 预览勾选 → 目标配置 → 确认下载）；页面 C 模组列表；
  *     页面 D 任务中心（进行中 / 已完成 + 结算页）；页面 H 设置（并发 / 限速 / 主题）
  *   - 通信：Fetch 调用 FastAPI HTTP 接口；MC 版本统一从 /api/mc_versions 下拉选择
@@ -154,7 +154,6 @@ const PAGE_TITLES = {
     pageC: "模组列表",
     pageD: "任务中心",
     pageF: "关于",
-    pageG: "更新日志",
     pageH: "设置",
 };
 
@@ -165,7 +164,6 @@ const PAGE_GROUP = {
     pageC: "工作流",
     pageD: "运维",
     pageF: "更多",
-    pageG: "更多",
     pageH: "更多",
 };
 
@@ -1563,7 +1561,7 @@ loadMcVersions();
 startQueuePoll();
 loadSettings();
 // 从后端拉取真实版本号覆盖静态显示（单一事实来源 backend.api.CURRENT_VERSION）
-// 并缓存 changelog 供「更新日志」页渲染
+// 并缓存 changelog 供「关于」页渲染
 (async function bootstrapVersion() {
     try {
         const v = await getJSON(`${API}/version`);
@@ -1581,19 +1579,36 @@ loadSettings();
         }
         // 浏览器标题
         if (v.display) document.title = `${v.display} · Minecraft 双源模组迁移工具`;
-        // 更新日志页：若后端返回 changelog 则渲染（静态 HTML 中已经有 V3.0 条目，这里做一致性覆盖）
-        if (Array.isArray(v.changelog) && v.changelog.length) {
-            const root = document.getElementById("changelogRoot");
-            if (root) {
-                root.innerHTML = v.changelog.map((c, idx) => `
-                    <div class="cl-item" ${idx === 0 ? 'style="border-left-color:var(--primary);background:linear-gradient(90deg,rgba(86,122,255,.08),transparent 60%);padding:10px 16px 14px 16px;border-radius:8px"' : ''}>
-                        <span class="cl-ver">v${c.version || ''}</span>
-                        ${c.date ? `<div class="cl-date">${c.date}${idx === 0 ? ' · 最新正式版' : ''}</div>` : ''}
-                        ${c.title ? `<div class="cl-title">${c.title}</div>` : ''}
-                        <ul class="cl-list">${(c.items || []).map(i => `<li>${i}</li>`).join('')}</ul>
-                    </div>
-                `).join('');
+        // 更新日志（已并入「关于」页）：后端返回 changelog 则渲染，最新版本默认展开、历史版本折叠可点击展开
+        const clRoot = document.getElementById("changelogRoot");
+        if (clRoot) {
+            if (Array.isArray(v.changelog) && v.changelog.length) {
+                clRoot.innerHTML = v.changelog.map((c, idx) => {
+                    const open = idx === 0;
+                    return `
+                    <div class="cl-item cl-fold" data-open="${open ? 1 : 0}">
+                        <div class="cl-head" role="button" title="点击展开/收起">
+                            <span class="cl-ver">v${c.version || ''}</span>
+                            <span class="cl-fold-hint">${open ? '▾' : '▸'}</span>
+                        </div>
+                        ${c.date ? `<div class="cl-date">${c.date}${open ? ' · 最新正式版' : ''}</div>` : ''}
+                        <div class="cl-fold-body">
+                            ${c.title ? `<div class="cl-title">${c.title}</div>` : ''}
+                            <ul class="cl-list">${(c.items || []).map(i => `<li>${i}</li>`).join('')}</ul>
+                        </div>
+                    </div>`;
+                }).join('');
             }
+            clRoot.addEventListener("click", (e) => {
+                const head = e.target.closest(".cl-head");
+                if (!head) return;
+                const item = head.closest(".cl-item");
+                if (!item) return;
+                const next = item.getAttribute("data-open") === "1" ? "0" : "1";
+                item.setAttribute("data-open", next);
+                const hint = head.querySelector(".cl-fold-hint");
+                if (hint) hint.textContent = next === "1" ? "▾" : "▸";
+            });
         }
     } catch (_) {}
 })();

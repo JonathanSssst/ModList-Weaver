@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ModList-Weaver v3.0.0 · Minecraft 双源模组迁移工具</title>
+    <title>ModList-Weaver v3.0.1 · Minecraft 双源模组迁移工具</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -22,7 +22,7 @@
                 </div>
                 <div class="sidebar-brand-text">
                     <div class="sb-title">ModList-Weaver</div>
-                    <div class="sb-sub">模组迁移工具 v3.0.0</div>
+                    <div class="sb-sub">模组迁移工具 v3.0.1</div>
                 </div>
             </div>
 
@@ -101,19 +101,7 @@
                     <span class="nav-badge">F</span>
                 </a>
 
-                <!-- G：更新日志 -->
-                <a href="#" class="nav-item" data-page="pageG">
-                    <span class="nav-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 20h9"/>
-                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-                        </svg>
-                    </span>
-                    <span class="nav-label">更新日志</span>
-                    <span class="nav-badge">G</span>
-                </a>
-
-                <!-- H：设置 -->
+                <!-- G：设置 -->
                 <a href="#" class="nav-item" data-page="pageH">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -122,7 +110,7 @@
                         </svg>
                     </span>
                     <span class="nav-label">设置</span>
-                    <span class="nav-badge">H</span>
+                    <span class="nav-badge">G</span>
                 </a>
             </nav>
 
@@ -747,7 +735,7 @@
                                 </div>
                                 <div class="about-hero-main">
                                     <div class="about-name">ModList-Weaver</div>
-                                    <div class="about-ver">版本 v3.0.0</div>
+                                    <div class="about-ver">版本 v3.0.1</div>
                                     <div class="about-desc">Minecraft 双源（Modrinth + CurseForge）模组迁移工具：扫描旧版本 mods 目录、导出 modlist.json、批量 / 单模组下载。</div>
                                 </div>
                             </div>
@@ -760,7 +748,7 @@
                         </div>
                         <div class="card-body">
                             <div class="about-author">
-                                <img class="author-avatar lg" src="/src/images/head.png" alt="LSssT" />
+                                <img class="author-avatar lg" src="/static/src/images/head.png" alt="LSssT" />
                                 <div>
                                     <div class="author-name">LSssT</div>
                                     <a class="about-link" href="https://github.com/JonathanSssst" target="_blank">https://github.com/JonathanSssst</a>
@@ -768,93 +756,133 @@
                             </div>
                         </div>
                     </div>
-                </section>
-
-                <!-- ==================== 页面 G：更新日志 ==================== -->
-                <section class="page" id="pageG">
-                    <div class="page-head">
-                        <div>
-                            <h2 class="page-title">更新日志</h2>
-                        </div>
-                    </div>
 
                     <div class="card">
                         <div class="card-head">
-                            <div class="ch-title"><span class="ch-step">◈</span> 版本历史</div>
+                            <div class="ch-title"><span class="ch-step">◈</span> 更新日志</div>
                         </div>
                         <div class="card-body">
                             <div class="changelog-section" id="changelogRoot">
-                                <div class="cl-item">
-                                    <div class="cl-ver">v3.0.0</div>
+                                <div class="cl-item cl-fold" data-open="1">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v3.0.1</span>
+                                        <span class="cl-fold-hint">▾</span>
+                                    </div>
                                     <div class="cl-date">2026-08 · 最新正式版</div>
-                                    <div class="cl-title">断点续传 + CurseForge 双源 + 自动化 CI/CD</div>
-                                    <ul class="cl-list">
-                                        <li><b>【断点续传】</b>下载中断后保留 .part 临时文件，HTTP Range 请求从断点续传，避免重复下载浪费带宽（Modrinth / CurseForge 双客户端一致实现）。</li>
-                                        <li><b>【CurseForge 双源支持】</b>新增独立 CurseForge 客户端：murmur2 指纹匹配、项目搜索、版本列表、依赖递归、文件下载、服务端 429 速率节流自适应。</li>
-                                        <li><b>【多源自动路由】</b>settings.source = auto / modrinth / curseforge；扫描阶段 Modrinth sha512 未命中时自动 fallback CurseForge murmur2，识别率显著提升。</li>
-                                        <li><b>【多算法哈希校验】</b>优先级自适应：sha512 &gt; sha1 &gt; murmur2，按源 API 返回的可用字段选择最可靠的校验方案。</li>
-                                        <li><b>【pytest 单测 29/29 PASS】</b>新增 tests/ 三套用例：scanner 哈希与 jar 解析、downloader 版本选择 / TaskGate / 限速器 / 哈希策略、CurseForge murmur2 + Settings 持久化边界。</li>
-                                        <li><b>【GitHub Actions CI/CD】</b>push / PR：2 OS × 3 Python 跑单测矩阵；main / master / v* tag：PyInstaller 自动打 Windows 包；打 v* 正式 tag：自动上传 .zip 到 GitHub Release 并生成发布说明。</li>
-                                        <li><b>【工程化】</b>build.spec 补 backend.*、hashlib 等 hiddenimports；requirements.txt 加入 pytest 开发依赖；.gitignore 补 build / dist / .pytest_cache。</li>
-                                    </ul>
+                                    <div class="cl-fold-body">
+                                        <div class="cl-title">更新日志并入关于页 · 作者头像修复</div>
+                                        <ul class="cl-list">
+                                            <li>「更新日志」并入「关于」页面：关于页直接展示完整版本历史，最新版本默认展开，历史版本自动折叠，可点击版本号展开/收起。</li>
+                                            <li>侧边栏移除独立「更新日志」入口，导航更精简。</li>
+                                            <li>修复关于页作者头像无法显示的问题（静态资源路径指向错误，/src → /static/src）。</li>
+                                        </ul>
+                                    </div>
                                 </div>
-                                <div class="cl-item">
-                                    <div class="cl-ver">v2.5</div>
-                                    <ul class="cl-list">
-                                        <li>修复批量下载勾选模组后「下一步：目标配置」按钮无响应的问题。</li>
-                                        <li>修复任务 / 历史列表删除按钮缺少图标的问题（并补上「继续」按钮图标）。</li>
-                                        <li>结算页信息卡片重新排版：「任务」「保存目录」「清单文件」独占整行，长文本不再挤压错位。</li>
-                                        <li>进入结算页新增淡入上滑过渡动画。</li>
-                                    </ul>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v3.0.0</span>
+                                        <span class="cl-fold-hint">▸</span>
+                                    </div>
+                                    <div class="cl-fold-body">
+                                        <div class="cl-title">断点续传 + CurseForge 双源 + 自动化 CI/CD</div>
+                                        <ul class="cl-list">
+                                            <li><b>【断点续传】</b>下载中断后保留 .part 临时文件，HTTP Range 请求从断点续传，避免重复下载浪费带宽（Modrinth / CurseForge 双客户端一致实现）。</li>
+                                            <li><b>【CurseForge 双源支持】</b>新增独立 CurseForge 客户端：murmur2 指纹匹配、项目搜索、版本列表、依赖递归、文件下载、服务端 429 速率节流自适应。</li>
+                                            <li><b>【多源自动路由】</b>settings.source = auto / modrinth / curseforge；扫描阶段 Modrinth sha512 未命中时自动 fallback CurseForge murmur2，识别率显著提升。</li>
+                                            <li><b>【多算法哈希校验】</b>优先级自适应：sha512 &gt; sha1 &gt; murmur2，按源 API 返回的可用字段选择最可靠的校验方案。</li>
+                                            <li><b>【pytest 单测 29/29 PASS】</b>新增 tests/ 三套用例：scanner 哈希与 jar 解析、downloader 版本选择 / TaskGate / 限速器 / 哈希策略、CurseForge murmur2 + Settings 持久化边界。</li>
+                                            <li><b>【GitHub Actions CI/CD】</b>push / PR：2 OS × 3 Python 跑单测矩阵；main / master / v* tag：PyInstaller 自动打 Windows 包；打 v* 正式 tag：自动上传 .zip 到 GitHub Release 并生成发布说明。</li>
+                                            <li><b>【工程化】</b>build.spec 补 backend.*、hashlib 等 hiddenimports；requirements.txt 加入 pytest 开发依赖；.gitignore 补 build / dist / .pytest_cache。</li>
+                                        </ul>
+                                    </div>
                                 </div>
-                                <div class="cl-item">
-                                    <div class="cl-ver">v2.4</div>
-                                    <ul class="cl-list">
-                                        <li>新增「设置」页：最大并发下载数（默认 3）与全局网速限制，可热更新即时生效。</li>
-                                        <li>支持明暗主题，顶栏一键切换，偏好持久化。</li>
-                                        <li>批量下载改为四步向导：新增清单预览与勾选步骤，可按需选择下载模组。</li>
-                                        <li>任务详情改为双进度条：总任务进度 + 当前文件进度。</li>
-                                        <li>结算页合并失败 / 缺失为统一列表，按类型着色并标注原因，支持「查找类似」。</li>
-                                        <li>模组详情版本列表支持折叠展开更新日志。</li>
-                                        <li>精简各处说明性文字，界面更聚焦。</li>
-                                    </ul>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v2.5</span>
+                                        <span class="cl-fold-hint">▸</span>
+                                    </div>
+                                    <div class="cl-fold-body">
+                                        <ul class="cl-list">
+                                            <li>修复批量下载勾选模组后「下一步：目标配置」按钮无响应的问题。</li>
+                                            <li>修复任务 / 历史列表删除按钮缺少图标的问题（并补上「继续」按钮图标）。</li>
+                                            <li>结算页信息卡片重新排版：「任务」「保存目录」「清单文件」独占整行，长文本不再挤压错位。</li>
+                                            <li>进入结算页新增淡入上滑过渡动画。</li>
+                                        </ul>
+                                    </div>
                                 </div>
-                                <div class="cl-item">
-                                    <div class="cl-ver">v2.2</div>
-                                    <ul class="cl-list">
-                                        <li>「批量下载」改为三步向导，「模组列表」去除步骤编号。</li>
-                                        <li>所有版本输入改为下拉选择（读取 Minecraft 官方版本列表）。</li>
-                                        <li>任务中心拆分为「进行中 / 已完成」：终态任务持久化本机，重启不丢失。</li>
-                                        <li>日志不再内嵌刷新，改为「查看日志 / 导出日志」，日志归档于 cache/logs。</li>
-                                        <li>新增任务结算页：查看失败 / 缺失明细、重试、打开源 / 目标目录。</li>
-                                        <li>新增独立「更新日志」页；「关于」改为独立分类并展示作者头像。</li>
-                                        <li>修复任务中心删除按钮显示异常、面包屑根节点固定不变等问题。</li>
-                                    </ul>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v2.4</span>
+                                        <span class="cl-fold-hint">▸</span>
+                                    </div>
+                                    <div class="cl-fold-body">
+                                        <ul class="cl-list">
+                                            <li>新增「设置」页：最大并发下载数（默认 3）与全局网速限制，可热更新即时生效。</li>
+                                            <li>支持明暗主题，顶栏一键切换，偏好持久化。</li>
+                                            <li>批量下载改为四步向导：新增清单预览与勾选步骤，可按需选择下载模组。</li>
+                                            <li>任务详情改为双进度条：总任务进度 + 当前文件进度。</li>
+                                            <li>结算页合并失败 / 缺失为统一列表，按类型着色并标注原因，支持「查找类似」。</li>
+                                            <li>模组详情版本列表支持折叠展开更新日志。</li>
+                                            <li>精简各处说明性文字，界面更聚焦。</li>
+                                        </ul>
+                                    </div>
                                 </div>
-                                <div class="cl-item">
-                                    <div class="cl-ver">v2.1</div>
-                                    <ul class="cl-list">
-                                        <li>合并「搜索 &amp; 单模组」与「模组详情」为「模组列表」页，分页展示，支持筛选与搜索。</li>
-                                        <li>模组详情页新增一键下载（含 required 前置依赖）。</li>
-                                        <li>新增「关于」页面，展示本软件更新日志与作者信息。</li>
-                                    </ul>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v2.2</span>
+                                        <span class="cl-fold-hint">▸</span>
+                                    </div>
+                                    <div class="cl-fold-body">
+                                        <ul class="cl-list">
+                                            <li>「批量下载」改为三步向导，「模组列表」去除步骤编号。</li>
+                                            <li>所有版本输入改为下拉选择（读取 Minecraft 官方版本列表）。</li>
+                                            <li>任务中心拆分为「进行中 / 已完成」：终态任务持久化本机，重启不丢失。</li>
+                                            <li>日志不再内嵌刷新，改为「查看日志 / 导出日志」，日志归档于 cache/logs。</li>
+                                            <li>新增任务结算页：查看失败 / 缺失明细、重试、打开源 / 目标目录。</li>
+                                            <li>新增独立「更新日志」页；「关于」改为独立分类并展示作者头像。</li>
+                                            <li>修复任务中心删除按钮显示异常、面包屑根节点固定不变等问题。</li>
+                                        </ul>
+                                    </div>
                                 </div>
-                                <div class="cl-item">
-                                    <div class="cl-ver">v2.0</div>
-                                    <ul class="cl-list">
-                                        <li>新增下载队列：排队执行，支持暂停、继续、停止与删除。</li>
-                                        <li>新增模组详情页（图标、版本、作者、简介）。</li>
-                                        <li>扫描导出改为三步向导，支持勾选自定义导出，未识别模组标灰置顶。</li>
-                                        <li>任务中心重新排版，长文件名友好展示。</li>
-                                    </ul>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v2.1</span>
+                                        <span class="cl-fold-hint">▸</span>
+                                    </div>
+                                    <div class="cl-fold-body">
+                                        <ul class="cl-list">
+                                            <li>合并「搜索 &amp; 单模组」与「模组详情」为「模组列表」页，分页展示，支持筛选与搜索。</li>
+                                            <li>模组详情页新增一键下载（含 required 前置依赖）。</li>
+                                            <li>新增「关于」页面，展示本软件更新日志与作者信息。</li>
+                                        </ul>
+                                    </div>
                                 </div>
-                                <div class="cl-item">
-                                    <div class="cl-ver">v1.0</div>
-                                    <ul class="cl-list">
-                                        <li>扫描 mods 目录并通过文件哈希反查 Modrinth 项目。</li>
-                                        <li>导出 modlist.json。</li>
-                                        <li>批量 / 单模组下载（自动解析 required 前置依赖）。</li>
-                                    </ul>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v2.0</span>
+                                        <span class="cl-fold-hint">▸</span>
+                                    </div>
+                                    <div class="cl-fold-body">
+                                        <ul class="cl-list">
+                                            <li>新增下载队列：排队执行，支持暂停、继续、停止与删除。</li>
+                                            <li>新增模组详情页（图标、版本、作者、简介）。</li>
+                                            <li>扫描导出改为三步向导，支持勾选自定义导出，未识别模组标灰置顶。</li>
+                                            <li>任务中心重新排版，长文件名友好展示。</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v1.0</span>
+                                        <span class="cl-fold-hint">▸</span>
+                                    </div>
+                                    <div class="cl-fold-body">
+                                        <ul class="cl-list">
+                                            <li>扫描 mods 目录并通过文件哈希反查 Modrinth 项目。</li>
+                                            <li>导出 modlist.json。</li>
+                                            <li>批量 / 单模组下载（自动解析 required 前置依赖）。</li>
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
