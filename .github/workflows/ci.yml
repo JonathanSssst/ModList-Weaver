@@ -88,24 +88,56 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: 生成 Release 描述（合并本次更新内容）
+        shell: bash
+        run: |
+          python - <<'PY'
+          from backend.api import CHANGELOG, APP_TITLE
+          tag = "${{ github.ref_name }}"
+          out = []
+          try:
+              ver = tag[1:] if tag.startswith("v") else tag
+              entry = next((c for c in CHANGELOG if c["version"] == ver), None)
+              out.append(f"## {APP_TITLE} {tag}")
+              out.append("")
+              if entry:
+                  if entry.get("date"):
+                      out.append(f"**发布时间**：{entry['date']}")
+                  if entry.get("title"):
+                      out.append(f"**主题**：{entry['title']}")
+                  out.append("")
+                  out.append("### 本次更新")
+                  out.append("")
+                  out.extend(f"- {i}" for i in (entry.get("items") or []))
+              else:
+                  out.append("### 本次更新")
+                  out.append("")
+                  out.append("- 未找到对应版本的软件内更新日志，请查看提交记录。")
+          except Exception:
+              out = [f"## {APP_TITLE} {tag}", "", "（未能生成本次更新说明，请查看提交记录。）"]
+          out.extend([
+              "", "---", "",
+              "### 自动构建产物",
+              "Windows x64 单目录版（PyInstaller COLLECT 模式，含内嵌 WebView + Python 运行时）。",
+              "", "### 使用方法",
+              "1. 解压压缩包到任意目录",
+              f"2. 双击运行 `{APP_TITLE}.exe`",
+              "3. 首次运行会初始化缓存文件，首次启动稍慢",
+              "", "> 本版本 CI 通过：单元测试（Windows × Ubuntu × 3 个 Python 版本矩阵） ✅",
+          ])
+          with open("release_body.md", "w", encoding="utf-8") as f:
+              f.write("\n".join(out) + "\n")
+          PY
+
       - name: 上传到 GitHub Release（仅当打了 v* tag）
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.ZIP_NAME }}
           fail_on_unmatched_files: true
+          body_path: release_body.md
           generate_release_notes: true
           update_existing_release: true
           make_latest: true
-          body: |
-            ## ${{ env.PACKAGE_NAME }} ${{ github.ref_name }}
-            自动构建产物：Windows x64 单目录版（PyInstaller COLLECT 模式，含内嵌 WebView + Python 运行时）。
-
-            使用方法：
-              1. 解压 `${{ env.ZIP_NAME }}` 到任意目录
-              2. 双击运行 `${{ env.PACKAGE_NAME }}.exe`
-              3. 首次运行会初始化缓存文件，首次启动稍慢
-
-            > 本版本 CI 通过：单元测试（Windows × Ubuntu × 3 个 Python 版本矩阵） ✅
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
