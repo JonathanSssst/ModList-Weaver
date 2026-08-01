@@ -92,6 +92,8 @@ jobs:
           files: ${{ env.ZIP_NAME }}
           fail_on_unmatched_files: true
           generate_release_notes: true
+          update_existing_release: true
+          make_latest: true
           body: |
             ## ${{ env.PACKAGE_NAME }} ${{ github.ref_name }}
             自动构建产物：Windows x64 单目录版（PyInstaller COLLECT 模式，含内嵌 WebView + Python 运行时）。
@@ -101,6 +103,6 @@ jobs:
               2. 双击运行 `${{ env.PACKAGE_NAME }}.exe`
               3. 首次运行会初始化缓存文件，首次启动稍慢
 
-            > 本版本 CI 通过：单元测试（3 OS × 3 Python 版本矩阵） ✅
+            > 本版本 CI 通过：单元测试（Windows × Ubuntu × 3 个 Python 版本矩阵） ✅
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
