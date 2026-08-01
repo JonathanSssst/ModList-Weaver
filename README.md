@@ -83,8 +83,8 @@ ModList-Weaver/
 │   ├── settings.json        # 用户设置
 │   ├── temp/tasks.json      # 任务历史持久化
 │   └── logs/                # 任务日志缓存
-├── mods/                    # 模组存放目录（运行时填充）
-└── output/                  # 导出清单输出目录
+├── mods/                    # 模组存放目录（运行时填充，已 gitignore）
+└── output/                  # 导出清单输出目录（已 gitignore）
 ```
 
 ---
