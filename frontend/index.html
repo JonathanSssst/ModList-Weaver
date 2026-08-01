@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ModList-Weaver v3.0.1 · Minecraft 双源模组迁移工具</title>
+    <title>ModList-Weaver v3.1.0 · Minecraft 双源模组迁移工具</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -22,7 +22,7 @@
                 </div>
                 <div class="sidebar-brand-text">
                     <div class="sb-title">ModList-Weaver</div>
-                    <div class="sb-sub">模组迁移工具 v3.0.1</div>
+                    <div class="sb-sub">模组迁移工具 v3.1.0</div>
                 </div>
             </div>
 
@@ -161,6 +161,24 @@
 
             <div class="content-wrapper">
 
+                <!-- 软件更新提示横幅（V3.1：启动自动检查 GitHub Release） -->
+                <div class="app-update-banner" id="appUpdateBanner" style="display:none">
+                    <div class="aub-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                    </div>
+                    <div class="aub-main">
+                        <b>发现新版本 v<span id="aubVersion">0.0.0</span></b>
+                        <span class="aub-sub" id="aubBody">软件有新版本，前往 GitHub 下载更新。</span>
+                    </div>
+                    <div class="aub-actions">
+                        <button class="btn btn-primary btn-sm" id="btnAubDownload">前往下载</button>
+                        <button class="btn btn-outline btn-sm" id="btnAubIgnore">忽略此版本</button>
+                    </div>
+                </div>
+
                 <!-- ==================== 页面 A：扫描 & 导出（三步向导） ==================== -->
                 <section class="page active" id="pageA">
                     <div class="page-head">
@@ -247,6 +265,16 @@
                                         <button class="btn btn-outline btn-sm" id="btnSelectNone">清空</button>
                                         <button class="btn btn-outline btn-sm" id="btnSelectInvert">反选</button>
                                         <span class="mt-hint">已选 <b id="selCount">0</b> / <span id="selTotal">0</span></span>
+                                    </div>
+                                    <div class="mt-right">
+                                        <button class="btn btn-outline btn-sm" id="btnCheckUpdates" title="检测已识别模组是否有新版本">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                                            </svg>
+                                            检查更新
+                                        </button>
+                                        <span class="mt-hint" id="updateCount"></span>
                                     </div>
                                 </div>
                             </div>
@@ -735,8 +763,12 @@
                                 </div>
                                 <div class="about-hero-main">
                                     <div class="about-name">ModList-Weaver</div>
-                                    <div class="about-ver">版本 v3.0.1</div>
+                                    <div class="about-ver">版本 v3.1.0</div>
                                     <div class="about-desc">Minecraft 双源（Modrinth + CurseForge）模组迁移工具：扫描旧版本 mods 目录、导出 modlist.json、批量 / 单模组下载。</div>
+                                    <div class="about-update-row">
+                                        <button class="btn btn-outline btn-sm" id="btnCheckAppUpdate">检查更新</button>
+                                        <span class="field-hint" id="appUpdateResult"></span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -765,10 +797,27 @@
                             <div class="changelog-section" id="changelogRoot">
                                 <div class="cl-item cl-fold" data-open="1">
                                     <div class="cl-head" role="button" title="点击展开/收起">
-                                        <span class="cl-ver">v3.0.1</span>
+                                        <span class="cl-ver">v3.1.0</span>
                                         <span class="cl-fold-hint">▾</span>
                                     </div>
                                     <div class="cl-date">2026-08 · 最新正式版</div>
+                                    <div class="cl-fold-body">
+                                        <div class="cl-title">模组更新检测 · 软件自动更新 · 断点恢复 · 拖拽导入</div>
+                                        <ul class="cl-list">
+                                            <li><b>【模组更新检测】</b>步骤 2 新增「检查更新」按钮：按模组所属源拉取最新适配版本并与已安装版本比对，命中更新在列表标黄徽章显示最新版本号，并汇总更新数量。</li>
+                                            <li><b>【软件自动更新检查】</b>启动时静默检查 GitHub Release，发现新版本在页面顶部弹出更新横幅，支持一键跳转下载或忽略本次版本。</li>
+                                            <li><b>【断点恢复】</b>进程异常退出后，重启自动恢复未完成任务（cache/temp/active.json），按原参数重新排队执行。</li>
+                                            <li><b>【拖拽导入】</b>桌面窗口支持将 .json 模组清单直接拖入任意区域完成导入，自动跳到批量下载第一步。</li>
+                                            <li><b>【工程化】</b>移除根目录冗余 static/ 目录，静态资源统一由 frontend/ 提供。</li>
+                                            <li><b>【测试】</b>新增 tests/test_resume_and_updates.py，pytest 35/35 通过。</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v3.0.1</span>
+                                        <span class="cl-fold-hint">▸</span>
+                                    </div>
                                     <div class="cl-fold-body">
                                         <div class="cl-title">更新日志并入关于页 · 作者头像修复</div>
                                         <ul class="cl-list">
@@ -992,6 +1041,14 @@
 
     <!-- 全局提示条 -->
     <div class="toast" id="toast"></div>
+
+    <!-- 拖拽提示遮罩（V3.1） -->
+    <div class="drop-overlay" id="dropOverlay" style="display:none">
+        <div class="drop-overlay-box">
+            <b>松开以使用拖入的内容</b>
+            <span>支持：mods 文件夹 → 自动填入扫描目录；modlist.json → 自动进入批量下载</span>
+        </div>
+    </div>
 
     <script src="/static/main.js"></script>
 </body>

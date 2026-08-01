@@ -9,6 +9,7 @@
 
 版本号与 changelog 单一事实来源位于 backend.api:CURRENT_VERSION / CHANGELOG
 """
+import json
 import os
 import socket
 import sys
@@ -55,6 +56,42 @@ def wait_for_server(url, timeout=20):
     return False
 
 
+def _setup_drag_drop(window):
+    """通过 pywebview DOM API 支持任意位置拖拽（V3.1）
+
+    edgechromium 后端会为 drop 事件的 file 注入 pywebviewFullPath（完整绝对路径），
+    拿到路径后回调给前端 JS（window.__pywebviewDropped）分发处理。
+    """
+    try:
+        from webview.dom import DOMEventHandler
+    except Exception:
+        return
+    doc = window.dom.document
+    # dragover / dragenter 必须 preventDefault，否则浏览器不允许放置
+    doc.events.dragover += DOMEventHandler(lambda _e: None, prevent_default=True)
+    doc.events.dragenter += DOMEventHandler(lambda _e: None, prevent_default=True)
+
+    def _on_drop(event):
+        files = ((event or {}).get("dataTransfer") or {}).get("files") or []
+        items = []
+        for f in files:
+            p = (f or {}).get("pywebviewFullPath") or ""
+            if not p:
+                continue
+            items.append({
+                "path": p,
+                "name": (f or {}).get("name") or os.path.basename(p.rstrip("/\\")),
+                "is_dir": os.path.isdir(p),
+                "ext": os.path.splitext(p)[1].lower(),
+            })
+        if items:
+            window.evaluate_js(
+                "window.__pywebviewDropped && window.__pywebviewDropped(%s)"
+                % json.dumps(items, ensure_ascii=False))
+
+    doc.events.drop += DOMEventHandler(_on_drop)
+
+
 def main():
     # 版本号 / 标题：单一事实来源 backend.api.CURRENT_VERSION
     try:
@@ -76,7 +113,7 @@ def main():
         sys.exit(1)
 
     # 启动 pywebview 桌面窗口（内嵌网页，不会弹出系统浏览器）
-    webview.create_window(
+    window = webview.create_window(
         title=f"{APP_TITLE} v{CURRENT_VERSION} · Minecraft 双源模组迁移工具",
         url=url,
         width=1200,
@@ -84,6 +121,8 @@ def main():
         min_size=(980, 680),
         text_select=True,
     )
+    # 页面加载完成后挂载拖拽监听（获取拖入文件的完整绝对路径）
+    window.events.loaded += lambda: _setup_drag_drop(window)
     webview.start()
 
 

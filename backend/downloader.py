@@ -163,6 +163,35 @@ class TaskState:
             self._speed_last_time = now
             self._speed_last_bytes = done
 
+    @classmethod
+    def from_dict(cls, d):
+        """从持久化快照重建任务状态（用于重启后恢复未完成任务）
+
+        恢复后的任务统一置为 pending，由队列调度重新排队执行；
+        .part 断点续传 + 已存在文件哈希校验保证不会重复下载。
+        """
+        st = cls(d.get("task_id") or "", d.get("kind") or "single")
+        st.status = "pending"
+        st.logs = d.get("logs") or []
+        st.success = d.get("success") or []
+        st.failed = d.get("failed") or []
+        st.missing = d.get("missing") or []
+        st.total = d.get("total") or 0
+        st.done = d.get("done") or 0
+        st.current_file = d.get("current_file") or ""
+        st.progress_done = d.get("progress_done") or 0
+        st.progress_total = d.get("progress_total") or 0
+        st.speed_text = d.get("speed_text") or "0 B/s"
+        st.skipped_count = d.get("skipped_count") or 0
+        st.mc_version = d.get("mc_version") or ""
+        st.loader = d.get("loader") or ""
+        st.save_dir = d.get("save_dir") or ""
+        st.source = d.get("source") or ""
+        st.subtask_index = d.get("subtask_index") or 0
+        st.started_at = d.get("started_at") or time.time()
+        st.finished_at = d.get("finished_at")
+        return st
+
     def to_dict(self, position=None, queue_size=None):
         """序列化任务状态（position/queue_size 由队列管理器填充；日志单独通过 /logs 缓存读取）"""
         duration = 0.0
@@ -201,10 +230,11 @@ class TaskState:
 class _TaskEntry:
     """任务队列条目：状态 + 门控 + 底层 asyncio 任务"""
 
-    def __init__(self, tid, kind, run_factory):
+    def __init__(self, tid, kind, run_factory, params=None):
         self.task_id = tid
         self.kind = kind
         self.run_factory = run_factory  # callable(gate) -> coroutine
+        self.params = params or {}  # 重建 run_factory 所需的参数（断点恢复用）
         self.state = TaskState(tid, kind)
         self.gate = TaskGate()
         self.async_task = None  # asyncio.Task
@@ -256,6 +286,24 @@ class TaskManager:
         except OSError:
             pass
 
+    def _persist_active(self):
+        """持久化进行中任务（含重建参数），供重启后断点恢复
+
+        写入 cache/temp/active.json；每次任务状态变化时调用。
+        """
+        try:
+            self._temp_dir.mkdir(parents=True, exist_ok=True)
+            data = {"tasks": [{
+                "task_id": e.task_id,
+                "kind": e.kind,
+                "params": e.params,
+                "state": {**e.state.to_dict(), "logs": e.state.logs},
+            } for e in self.tasks.values()]}
+            (self._temp_dir / "active.json").write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+
     def _write_log_file(self, task_id, logs):
         try:
             self._logs_dir.mkdir(parents=True, exist_ok=True)
@@ -282,16 +330,50 @@ class TaskManager:
 
     # ---------- 创建 / 查询 ----------
 
-    async def create(self, kind, run_factory):
+    async def create(self, kind, run_factory, params=None):
         """创建任务并入队；若队列空闲则立即启动"""
         async with self._lock:
             self._counter += 1
             tid = f"task_{int(time.time())}_{self._counter}"
-            entry = _TaskEntry(tid, kind, run_factory)
+            entry = _TaskEntry(tid, kind, run_factory, params)
             self.tasks[tid] = entry
             self.queue.append(tid)
             self._advance()
+            self._persist_active()
             return tid, entry.state
+
+    async def resume_active(self, factory_builder):
+        """重启后恢复上次未完成的任务（断点恢复）
+
+        :param factory_builder: callable(kind, params, state) -> run_factory，
+                                由调用方（api.py）根据 params 重建下载闭包
+        :return: 恢复的任务数量
+        """
+        active_path = self._temp_dir / "active.json"
+        if not active_path.is_file():
+            return 0
+        try:
+            data = json.loads(active_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return 0
+        async with self._lock:
+            count = 0
+            for a in (data.get("tasks") or []):
+                tid = a.get("task_id")
+                if not tid or tid in self.tasks:
+                    continue
+                kind = a.get("kind") or "single"
+                params = a.get("params") or {}
+                state = TaskState.from_dict(a.get("state") or {})
+                state.add_log("[恢复] 检测到上次未完成的任务，已自动恢复排队执行", "warn")
+                entry = _TaskEntry(tid, kind, factory_builder(kind, params, state), params)
+                entry.state = state
+                self.tasks[tid] = entry
+                self.queue.append(tid)
+                count += 1
+            self._advance()
+            self._persist_active()
+            return count
 
     def get(self, task_id):
         return self.tasks.get(task_id)
@@ -350,6 +432,7 @@ class TaskManager:
         entry.state.started_at = time.time()
         entry.gate = TaskGate()
         entry.async_task = asyncio.create_task(self._run(entry))
+        self._persist_active()
 
     async def _run(self, entry):
         """任务执行包装：捕获停止/取消/异常，统一收尾并推进队列"""
@@ -386,6 +469,7 @@ class TaskManager:
         self._write_log_file(entry.task_id, entry.state.logs)
         self.tasks.pop(entry.task_id, None)
         self._persist()
+        self._persist_active()
 
     def history_entry(self, task_id):
         """获取终态任务的历史记录 dict（含 state 与 logs）"""
@@ -401,6 +485,7 @@ class TaskManager:
         entry.gate.pause()
         entry.state.status = "paused"
         entry.state.add_log("[暂停] 任务已暂停，将在当前文件结束后挂起", "warn")
+        self._persist_active()
         return True
 
     def resume(self, task_id):
@@ -411,6 +496,7 @@ class TaskManager:
         entry.gate.resume()
         entry.state.status = "running"
         entry.state.add_log("[继续] 任务恢复执行", "success")
+        self._persist_active()
         return True
 
     def stop(self, task_id):
@@ -433,6 +519,7 @@ class TaskManager:
         else:
             # 排队中（从未启动）的任务，直接收尾进历史
             self._finalize(entry)
+        self._persist_active()
         return True
 
     def delete(self, task_id):
@@ -447,6 +534,7 @@ class TaskManager:
                 self.queue.remove(task_id)
             self.tasks.pop(task_id, None)
             self._persist()
+            self._persist_active()
             return True
         if task_id in self.history_map:
             self.history_map.pop(task_id, None)

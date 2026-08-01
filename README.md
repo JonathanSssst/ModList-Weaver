@@ -2,7 +2,7 @@
 
 > Minecraft 双源（Modrinth / CurseForge）模组迁移桌面工具 —— 一键扫描本地 mods，导出模组清单，跨版本/跨加载器批量重下载，自带断点续传、哈希校验、依赖递归与任务队列。
 
-当前版本：**v3.0.0** · 平台：Windows x64（PyInstaller 打包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
+当前版本：**v3.1.0** · 平台：Windows x64（PyInstaller 打包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
 
 ---
 
@@ -317,6 +317,15 @@ project.source 字段优先级最高
 ## 版本历史
 
 完整 Changelog 在软件内「更新日志」页动态渲染（数据源：`backend/api.py:CHANGELOG`）。
+
+### v3.1.0（2026-08）· 模组更新检测 + 软件自动更新 + 断点恢复 + 拖拽导入
+
+- **模组更新检测**：步骤 2「检查更新」按源拉取最新适配版本与已安装版本比对，命中更新标黄徽章并汇总数量
+- **软件自动更新**：启动静默检查 GitHub Release，顶部横幅提示新版本，支持下载 / 忽略；「关于」页可手动检查
+- **断点恢复**：进程异常退出后重启自动恢复未完成任务（`cache/temp/active.json`）
+- **拖拽导入**：桌面窗口把 .json 清单拖入任意区域即导入并跳到批量下载第一步
+- **工程化**：移除根目录冗余 `static/`（静态资源统一由 `frontend/` 提供）
+- **测试**：新增 `tests/test_resume_and_updates.py`，pytest 35/35 通过
 
 ### v3.0.0（2026-08）· 断点续传 + CurseForge 双源 + 自动化 CI/CD
 

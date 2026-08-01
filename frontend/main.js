@@ -180,6 +180,7 @@ const state = {
     settleTaskId: null,   // 结算页当前任务（已完成历史）
     logModalTid: null,    // 日志弹窗当前任务
     logModalTimer: null,
+    updateMap: {},        // project_id -> 更新信息（检查更新结果，V3.1）
 };
 
 // 模组列表页（页面 C）：搜索状态
@@ -404,6 +405,10 @@ function renderModList(mods) {
         const badge = m.matched
             ? `<span class="m-badge ok">已识别</span>`
             : `<span class="m-badge no">未识别</span>`;
+        const upd = m.matched ? state.updateMap[m.project_id] : null;
+        const updBadge = upd
+            ? `<span class="m-badge upd" title="当前 ${escapeHtml(upd.current_version)} → 最新 ${escapeHtml(upd.latest_version)}${upd.changelog ? "\n" + escapeHtml(upd.changelog) : ""}">有更新 ${escapeHtml(upd.latest_version)}</span>`
+            : `<span class="m-badge no" style="visibility:hidden">有更新</span>`;
         const pid = m.project_id
             ? `<span class="m-pid">${m.project_id}</span>`
             : `<span class="m-pid">本地模组</span>`;
@@ -417,6 +422,7 @@ function renderModList(mods) {
             ${pid}
             <span class="m-pid">${escapeHtml((m.metadata && m.metadata.loader) || "?")}</span>
             ${badge}
+            ${updBadge}
             <span class="m-size">${formatBytes(m.size)}</span>
             <span class="m-open">›</span>
         </div>`;
@@ -466,6 +472,39 @@ document.getElementById("btnSelectInvert").addEventListener("click", () => {
     state.scannedMods.forEach(m => { if (m.matched) m.selected = !m.selected; });
     renderModList(state.scannedMods);
 });
+
+// ---------- 步骤 2：更新检测（V3.1） ----------
+document.getElementById("btnCheckUpdates").addEventListener("click", checkUpdates);
+
+async function checkUpdates() {
+    const mods = state.scannedMods
+        .filter(m => m.matched && m.project_id)
+        .map(m => ({
+            project_id: m.project_id,
+            version_id: m.version_id,
+            version_number: m.version_number,
+            version_name: m.version_name,
+            source: m.source,
+            name: (m.metadata && (m.metadata.name || m.metadata.mod_id)) || m.filename,
+        }));
+    if (!mods.length) { toast("没有可检测的已识别模组", "err"); return; }
+    const btn = document.getElementById("btnCheckUpdates");
+    if (btn) { btn.disabled = true; btn.textContent = "检测中…"; }
+    try {
+        const data = await postJSON(`${API}/check_updates`, { mods });
+        state.updateMap = {};
+        (data.updates || []).forEach(u => { state.updateMap[u.project_id] = u; });
+        renderModList(state.scannedMods);
+        const n = data.update_count || 0;
+        const cnt = document.getElementById("updateCount");
+        if (cnt) cnt.textContent = n ? `${n} 个有新版本` : "全部最新";
+        toast(n ? `发现 ${n} 个模组有新版本` : "所有已识别模组均是最新版本", n ? "" : "ok");
+    } catch (e) {
+        toast("检查更新失败：" + e.message, "err");
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = "检查更新"; }
+    }
+}
 
 // ---------- 步骤 3：导出 ----------
 document.getElementById("btnBrowseExport").addEventListener("click", async () => {
@@ -1554,12 +1593,160 @@ document.getElementById("btnSaveSettings").addEventListener("click", async () =>
 });
 
 // ================================================================
+// 软件更新检查（V3.1）：启动自动查 GitHub Release，发现新版本显示横幅
+// ================================================================
+const APP_UPDATE_IGNORE_KEY = "mlw_ignored_version";
+let appUpdateInfo = null;
+
+function renderAppUpdateBanner(info) {
+    const banner = document.getElementById("appUpdateBanner");
+    if (!banner || !info || !info.has_update) return;
+    let ignored = "";
+    try { ignored = localStorage.getItem(APP_UPDATE_IGNORE_KEY) || ""; } catch (_) {}
+    if (ignored === info.latest_version) return;
+    const verEl = document.getElementById("aubVersion");
+    if (verEl) verEl.textContent = info.latest_version;
+    const bodyEl = document.getElementById("aubBody");
+    if (bodyEl) {
+        const line = String(info.body || "").split("\n").map(s => s.replace(/^#+\s*/, "").trim()).find(Boolean);
+        bodyEl.textContent = line || "软件有新版本，前往 GitHub 下载更新。";
+        bodyEl.title = info.release_url || "";
+    }
+    banner.style.display = "flex";
+}
+
+async function checkAppUpdate(force) {
+    try {
+        appUpdateInfo = await getJSON(`${API}/check_app_update${force ? "?force=true" : ""}`);
+        renderAppUpdateBanner(appUpdateInfo);
+        return appUpdateInfo;
+    } catch (_) {
+        return null;
+    }
+}
+
+document.getElementById("btnAubDownload").addEventListener("click", () => {
+    const url = (appUpdateInfo && appUpdateInfo.release_url)
+        || "https://github.com/JonathanSssst/ModList-Weaver/releases/latest";
+    window.open(url, "_blank");
+});
+
+document.getElementById("btnAubIgnore").addEventListener("click", () => {
+    if (appUpdateInfo && appUpdateInfo.latest_version) {
+        try { localStorage.setItem(APP_UPDATE_IGNORE_KEY, appUpdateInfo.latest_version); } catch (_) {}
+    }
+    const banner = document.getElementById("appUpdateBanner");
+    if (banner) banner.style.display = "none";
+});
+
+document.getElementById("btnCheckAppUpdate").addEventListener("click", async () => {
+    const el = document.getElementById("appUpdateResult");
+    if (el) el.textContent = "检查中…";
+    const info = await checkAppUpdate(true);
+    if (!info) { if (el) el.textContent = "检查失败（网络异常）"; return; }
+    if (info.has_update) {
+        if (el) el.textContent = "发现新版本 v" + info.latest_version;
+    } else if (info.error) {
+        if (el) el.textContent = "检查失败：" + info.error;
+    } else {
+        if (el) el.textContent = "已是最新版本 v" + info.current_version;
+    }
+});
+
+// ================================================================
+// 拖拽支持（V3.1）：文件夹 → 扫描目录；modlist.json → 批量下载
+// ================================================================
+function importDroppedJson(path) {
+    document.getElementById("jsonPath").value = path;
+    switchPage("pageB");
+    showBStep(1, true);
+    toast("已导入清单：" + String(path).split(/[\\/]/).pop(), "ok");
+}
+
+function showDropOverlay() {
+    const ov = document.getElementById("dropOverlay");
+    if (ov) ov.style.display = "flex";
+}
+function hideDropOverlay() {
+    const ov = document.getElementById("dropOverlay");
+    if (ov) ov.style.display = "none";
+}
+
+function isPywebviewRuntime() {
+    return !!(window.pywebview && (window.pywebview.api || window.pywebview.platform));
+}
+
+// pywebview 主机通过 main.py 注入完整绝对路径后回调本函数
+window.__pywebviewDropped = function (items) {
+    if (!Array.isArray(items) || !items.length) return;
+    const folder = items.find(i => i.is_dir);
+    const jsonFile = items.find(i => !i.is_dir && i.ext === ".json");
+    if (folder) {
+        const input = document.getElementById("scanFolder");
+        if (input) input.value = folder.path;
+        switchPage("pageA");
+        showWizardStep(1, true);
+        toast(`已填入模组目录：${folder.path}`, "ok");
+    } else if (jsonFile) {
+        importDroppedJson(jsonFile.path);
+    } else if (items.length === 1) {
+        importDroppedJson(items[0].path);
+    } else {
+        toast("请拖入 mods 文件夹或 modlist.json 文件", "err");
+    }
+};
+
+// 纯浏览器开发态降级：无完整路径时读取 json 文件内容导入
+(function setupNativeDrop() {
+    let dragDepth = 0;
+    document.addEventListener("dragenter", (e) => {
+        e.preventDefault();
+        dragDepth++;
+        showDropOverlay();
+    });
+    document.addEventListener("dragover", (e) => e.preventDefault());
+    document.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (!dragDepth) hideDropOverlay();
+    });
+    document.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dragDepth = 0;
+        hideDropOverlay();
+        if (isPywebviewRuntime()) return; // 由 pywebview 主机处理（含完整路径）
+        const files = e.dataTransfer && e.dataTransfer.files;
+        if (!files || !files.length) return;
+        const f = files[0];
+        if (f.name && f.name.toLowerCase().endsWith(".json")) {
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const data = await postJSON(`${API}/import_modlist`, {
+                        filename: f.name,
+                        content: String(reader.result || ""),
+                    });
+                    importDroppedJson(data.path);
+                } catch (err) {
+                    toast("导入清单失败：" + err.message, "err");
+                }
+            };
+            reader.onerror = () => toast("读取文件失败", "err");
+            reader.readAsText(f);
+        } else {
+            toast("请拖入 mods 文件夹或 modlist.json 文件", "err");
+        }
+    });
+})();
+
+// ================================================================
 // 启动
 // ================================================================
 setStatus("就绪");
 loadMcVersions();
 startQueuePoll();
 loadSettings();
+checkAppUpdate(false); // 启动检查软件更新（V3.1）
 // 从后端拉取真实版本号覆盖静态显示（单一事实来源 backend.api.CURRENT_VERSION）
 // 并缓存 changelog 供「关于」页渲染
 (async function bootstrapVersion() {

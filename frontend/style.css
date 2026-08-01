@@ -822,6 +822,7 @@ select.input {
 }
 .m-badge.ok { color: var(--ok); background: var(--ok-soft); }
 .m-badge.no { color: var(--skip); background: var(--bg-elev); }
+.m-badge.upd { color: var(--warn); background: var(--warn-soft); }
 
 /* 搜索结果条目（C页） */
 .search-item {
@@ -1186,12 +1187,84 @@ select.input {
     flex-wrap: wrap;
 }
 .mt-left { display: flex; align-items: center; gap: 8px; }
+.mt-right { display: flex; align-items: center; gap: 8px; }
 .mt-hint { font-size: 12.5px; color: var(--text-mute); }
 .mt-hint b { color: var(--primary); font-weight: 700; font-family: var(--font-mono); }
 
+/* 软件更新提示横幅（V3.1） */
+.app-update-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0 0 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--warn);
+    background: var(--warn-soft);
+    border-radius: 10px;
+    animation: fadeInUp 0.3s ease;
+}
+.aub-icon {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--warn);
+    background: var(--bg-elev);
+    border-radius: 8px;
+}
+.aub-icon svg { width: 18px; height: 18px; }
+.aub-main { flex: 1; min-width: 0; }
+.aub-main b { font-size: 13.5px; color: var(--text); }
+.aub-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--text-mute);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.aub-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.about-update-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+/* 拖拽提示遮罩（V3.1） */
+.drop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    backdrop-filter: blur(3px);
+    pointer-events: none;
+}
+.drop-overlay-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 34px 52px;
+    border: 2px dashed var(--primary);
+    border-radius: 14px;
+    background: var(--bg-elev);
+    color: var(--text);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+.drop-overlay-box b { font-size: 15px; }
+.drop-overlay-box span { font-size: 12px; color: var(--text-mute); }
+
 .mod-item {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto auto;
     gap: 12px;
     align-items: center;
     padding: 11px 20px;

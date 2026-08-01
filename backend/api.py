@@ -3,6 +3,7 @@
 接口列表：
   GET  /api/version              当前软件版本 + 版本历史（Changelog）
   POST /api/scan_mods            扫描 mods 目录，返回模组列表 + project_id 反查结果
+  POST /api/check_updates        检测已识别模组是否有新版本（V3.1）
   POST /api/export_json          生成 modlist 并保存本地
   POST /api/download_from_list   读取 modlist 启动批量下载（进入下载队列）
   POST /api/search_mod           关键词搜索 Modrinth 模组（分页/筛选）
@@ -22,6 +23,8 @@
   GET  /api/pick_folder          原生文件夹选择对话框
   GET  /api/pick_file            原生文件选择对话框
   GET  /api/pick_save            原生保存路径对话框
+  GET  /api/check_app_update     检查软件是否有新版本（GitHub Release，V3.1）
+  POST /api/import_modlist       导入拖拽的 modlist.json 内容（V3.1）
 """
 import json
 import os
@@ -40,6 +43,7 @@ from .curseforge_client import CurseForgeClient, CurseForgeError
 from .scanner import scan_mods
 from .downloader import (
     TaskManager, run_batch_download, run_single_download,
+    _pick_best_version, _pick_primary_from_version,
 )
 from .settings import init_settings, get_settings
 
@@ -47,12 +51,25 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.0.1"
+CURRENT_VERSION = "3.1.0"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.1.0",
+        "date": "2026-08",
+        "title": "模组更新检测 · 软件自动更新 · 断点恢复 · 拖拽导入",
+        "items": [
+            "【模组更新检测】步骤 2 新增「检查更新」按钮：按模组所属源（Modrinth / CurseForge）拉取最新适配版本，与已安装版本比对，命中更新在列表标黄徽章显示最新版本号，并汇总更新数量。",
+            "【软件自动更新检查】启动时静默检查 GitHub Release，发现新版本在页面顶部弹出更新横幅，支持一键跳转下载或忽略本次版本（「关于」页亦可手动检查）。",
+            "【断点恢复】进程异常退出后，重启自动恢复未完成任务（cache/temp/active.json），按原参数重新排队执行。",
+            "【拖拽导入】桌面窗口支持将 .json 模组清单直接拖入任意区域完成导入，自动跳到批量下载第一步；非桌面环境降级为浏览器原生拖拽读取。",
+            "【工程化】移除根目录冗余 static/ 目录（静态资源统一由 frontend/ 提供），前端资产打包与路径不受影响。",
+            "【测试】新增 tests/test_resume_and_updates.py（断点恢复、版本比较、更新检测、清单导入），pytest 35/35 通过。",
+        ],
+    },
     {
         "version": "3.0.1",
         "date": "2026-08",
@@ -186,6 +203,35 @@ cf_client = CurseForgeClient()
 task_manager = TaskManager()
 
 
+def _build_task_factory(kind, params, state):
+    """根据持久化参数重建下载任务的 run_factory（用于重启后断点恢复）"""
+    if kind == "batch":
+        async def _factory(gate):
+            return await run_batch_download(
+                client, params.get("json_path"), params.get("mc_version"),
+                params.get("loader"), params.get("save_dir"), state, gate,
+                project_ids=params.get("project_ids"),
+                cf_client=cf_client, global_source=params.get("source"))
+        return _factory
+
+    async def _factory(gate):
+        return await run_single_download(
+            client, params.get("project_id"), params.get("mc_version"),
+            params.get("loader"), params.get("save_dir"), state, gate,
+            cf_client=cf_client, force_source=params.get("source"))
+    return _factory
+
+
+@app.on_event("startup")
+async def _resume_interrupted_tasks():
+    """启动时自动恢复上次未完成的下载任务（断点恢复）"""
+    try:
+        await task_manager.resume_active(_build_task_factory)
+    except Exception:
+        # 恢复失败不影响主流程
+        pass
+
+
 @app.get("/")
 async def index():
     """返回前端首页"""
@@ -208,6 +254,112 @@ async def api_version():
         "changelog": CHANGELOG,
         "release_download": f"https://github.com/JonathanSssst/{APP_TITLE}/releases/tag/v{CURRENT_VERSION}",
     }
+
+
+# ==================== 软件更新检查 / 清单导入（V3.1） ====================
+
+class CheckUpdatesRequest(BaseModel):
+    mods: list = []  # [{project_id, version_id, version_number, version_name, source, name}]
+    mc_version: Optional[str] = None
+    loader: Optional[str] = None
+
+
+class ImportModlistRequest(BaseModel):
+    filename: Optional[str] = "modlist.json"
+    content: str
+
+
+_GITHUB_REPO = "JonathanSssst/ModList-Weaver"
+USER_AGENT_FOR_APP_UPDATE = "ModList-Weaver/3.1 (app update check)"
+_app_update_cache = {"t": 0.0, "data": None}
+_APP_UPDATE_TTL = 3600  # 缓存 1 小时
+
+
+def _parse_version(v):
+    """解析 'v3.1.0' / '3.1.0' 为 (major, minor, patch)，解析失败返回 None"""
+    s = str(v or "").strip().lower()
+    if s.startswith("v"):
+        s = s[1:]
+    parts = []
+    for seg in s.split("."):
+        digits = "".join(ch for ch in seg if ch.isdigit())
+        parts.append(int(digits) if digits else 0)
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts[:3])
+
+
+@app.get("/api/check_app_update")
+async def api_check_app_update(force: bool = False):
+    """检查 GitHub Release 是否有新版本（V3.1，1 小时内存缓存）
+
+    返回 has_update 标记与最新版信息；网络异常时填充 error 字段供前端提示。
+    """
+    global _app_update_cache
+    now = time.time()
+    if not force and _app_update_cache["data"] and now - _app_update_cache["t"] < _APP_UPDATE_TTL:
+        return _app_update_cache["data"]
+
+    result = {
+        "current_version": CURRENT_VERSION,
+        "latest_version": CURRENT_VERSION,
+        "has_update": False,
+        "release_url": "",
+        "published_at": "",
+        "body": "",
+        "error": "",
+    }
+    try:
+        resp = await client._client.get(
+            f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest",
+            headers={"User-Agent": USER_AGENT_FOR_APP_UPDATE, "Accept": "application/vnd.github+json"},
+            timeout=15.0)
+        if resp.status_code == 404:
+            result["error"] = "未找到 Release"
+        elif resp.status_code >= 400:
+            result["error"] = f"GitHub API HTTP {resp.status_code}"
+        else:
+            data = resp.json() or {}
+            tag = data.get("tag_name") or ""
+            latest = _parse_version(tag)
+            current = _parse_version(CURRENT_VERSION)
+            if latest and current:
+                result["has_update"] = latest > current
+            result["latest_version"] = tag.lstrip("v") or "未知"
+            result["release_url"] = data.get("html_url") or ""
+            result["published_at"] = (data.get("published_at") or "")[:10]
+            result["body"] = (data.get("body") or "")[:2000]
+    except Exception as e:
+        result["error"] = str(e)[:200]
+    _app_update_cache = {"t": now, "data": result}
+    return result
+
+
+@app.post("/api/import_modlist")
+async def api_import_modlist(req: ImportModlistRequest):
+    """导入拖拽的 modlist.json 内容（V3.1）
+
+    浏览器沙箱无法直接获取绝对路径，前端读取文件内容后提交，
+    后端落盘到 cache/temp/dropped 并返回文件路径供批量下载流程使用。
+    """
+    if not req.content or not req.content.strip():
+        raise HTTPException(status_code=400, detail="清单内容为空")
+    try:
+        json.loads(req.content)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"清单不是合法 JSON: {e}")
+    safe_name = "".join(ch for ch in (req.filename or "modlist.json")
+                        if ch.isalnum() or ch in "._-") or "modlist.json"
+    if not safe_name.lower().endswith(".json"):
+        safe_name += ".json"
+    drop_dir = Path(__file__).resolve().parent.parent / "cache" / "temp" / "dropped"
+    drop_dir.mkdir(parents=True, exist_ok=True)
+    path = drop_dir / f"{int(time.time())}_{safe_name}"
+    try:
+        path.write_text(req.content, encoding="utf-8")
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"保存导入清单失败: {e}")
+    return {"path": str(path), "filename": path.name}
 
 
 # ==================== MC 版本列表（下拉框） ====================
@@ -393,6 +545,57 @@ async def api_scan_mods(req: ScanRequest):
     }
 
 
+@app.post("/api/check_updates")
+async def api_check_updates(req: CheckUpdatesRequest):
+    """检测已识别模组是否有新版本（V3.1）
+
+    对每个已匹配模组查询其版本列表（优先适配 mc_version / loader，
+    否则取最新发布版），与本机安装的 version_id 比对，不同即视为有新版本。
+    """
+    updates = []
+    errors = []
+    checked = 0
+    for m in req.mods or []:
+        pid = (m or {}).get("project_id")
+        if not pid:
+            continue
+        src = (m or {}).get("source") or "modrinth"
+        installed_vid = (m or {}).get("version_id")
+        checked += 1
+        cl = cf_client if str(src).lower() == "curseforge" else client
+        try:
+            versions = await cl.get_versions_by_project(pid, None, None) or []
+        except (ModrinthError, CurseForgeError) as e:
+            errors.append({"project_id": pid, "name": (m or {}).get("name") or pid, "error": str(e)})
+            continue
+        if not versions:
+            continue
+        if req.mc_version and req.loader:
+            best, _ = _pick_best_version(versions, req.mc_version, req.loader)
+        else:
+            best = versions[0]
+        if not best:
+            continue
+        latest_vid = str(best.get("id") or best.get("version_id") or "")
+        if installed_vid and latest_vid and str(installed_vid) != latest_vid:
+            pf = _pick_primary_from_version(best)
+            updates.append({
+                "project_id": pid,
+                "name": (m or {}).get("name") or pid,
+                "source": src,
+                "current_version": (m or {}).get("version_number")
+                    or (m or {}).get("version_name") or "未知",
+                "latest_version": best.get("version_number") or best.get("name") or latest_vid,
+                "latest_version_id": latest_vid,
+                "game_versions": (best.get("game_versions") or [])[:4],
+                "loaders": (best.get("loaders") or [])[:3],
+                "changelog": (best.get("changelog") or "")[:500],
+                "filename": (pf or {}).get("filename"),
+                "download_url": (pf or {}).get("download_url"),
+            })
+    return {"checked": checked, "update_count": len(updates), "updates": updates, "errors": errors}
+
+
 @app.post("/api/export_json")
 async def api_export_json(req: ExportRequest):
     """生成 modlist 并保存本地（含多源 source 字段，V3.0）
@@ -455,7 +658,16 @@ async def api_download_from_list(req: DownloadListRequest):
             project_ids=req.project_ids, cf_client=cf_client,
             global_source=req.source)
 
-    tid, state = await task_manager.create("batch", _factory)
+    tid, state = await task_manager.create(
+        "batch", _factory,
+        params={
+            "json_path": req.json_path,
+            "mc_version": req.mc_version,
+            "loader": req.loader,
+            "save_dir": req.save_dir,
+            "project_ids": req.project_ids,
+            "source": req.source,
+        })
     return {"task_id": tid, "queued": state.status != "running"}
 
 
@@ -520,7 +732,15 @@ async def api_download_single_mod(req: DownloadSingleRequest):
             client, req.project_id, req.mc_version, req.loader, req.save_dir, state, gate,
             cf_client=cf_client, force_source=req.source)
 
-    tid, state = await task_manager.create("single", _factory)
+    tid, state = await task_manager.create(
+        "single", _factory,
+        params={
+            "project_id": req.project_id,
+            "mc_version": req.mc_version,
+            "loader": req.loader,
+            "save_dir": req.save_dir,
+            "source": req.source,
+        })
     return {"task_id": tid, "queued": state.status != "running"}
 
 
@@ -670,6 +890,10 @@ def api_update_settings(req: SettingsUpdateRequest):
         patch["rate_limit_mbps"] = req.rate_limit_mbps
     if req.theme is not None:
         patch["theme"] = req.theme
+    if req.source is not None:
+        patch["source"] = req.source
+    if req.curseforge_api_key is not None:
+        patch["curseforge_api_key"] = req.curseforge_api_key
     if not patch:
         raise HTTPException(status_code=400, detail="没有需要更新的设置项")
     get_settings().update(patch)
@@ -738,7 +962,14 @@ async def api_retry_task(req: RetryRequest):
         tid, st = await task_manager.create(
             "single",
             lambda gate, _p=_pid: run_single_download(
-                client, _p, mc, loader, save_dir, st, gate))
+                client, _p, mc, loader, save_dir, st, gate),
+            params={
+                "project_id": _pid,
+                "mc_version": mc,
+                "loader": loader,
+                "save_dir": save_dir,
+                "source": None,
+            })
         return tid, st
 
     created = []
