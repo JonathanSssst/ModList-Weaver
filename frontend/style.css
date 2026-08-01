@@ -1301,11 +1301,39 @@ select.input {
     white-space: nowrap;
 }
 .m-open {
+    display: flex;
+    align-items: center;
+    gap: 2px;
     color: var(--text-mute);
+}
+.m-open-chev {
     font-size: 18px;
     line-height: 1;
     width: 16px;
     text-align: center;
+    color: var(--text-mute);
+}
+.m-ext {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-elev);
+    color: var(--text-mute);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.m-ext svg {
+    width: 13px;
+    height: 13px;
+}
+.m-ext:hover {
+    color: var(--primary);
+    border-color: var(--primary-border);
 }
 
 /* ================================================================ */
@@ -1734,10 +1762,16 @@ select.input {
     margin-right: 2px;
 }
 .cat-open {
+    display: flex;
+    align-items: center;
+    gap: 2px;
     color: var(--text-mute);
+    flex-shrink: 0;
+}
+.cat-open-chev {
     font-size: 18px;
     line-height: 1;
-    flex-shrink: 0;
+    color: var(--text-mute);
 }
 
 /* ---- 分页条 ---- */
@@ -1831,19 +1865,6 @@ select.input {
     display: flex;
     align-items: center;
     gap: 14px;
-}
-.author-avatar.lg {
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--primary);
-    background: var(--primary-soft);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-mono);
 }
 .about-link {
     display: inline-block;
@@ -2154,17 +2175,6 @@ select.input {
 .log-view .log-line.err .log-msg { color: var(--err); }
 .log-view .log-line.warn .log-msg { color: var(--warn); }
 .log-view .log-line.ok .log-msg { color: var(--ok); }
-
-/* ---- ����ͷ��head.png�� ---- */
-.author-avatar.lg {
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid var(--primary-border);
-    background: var(--bg-elev);
-    box-shadow: var(--shadow-card);
-}
 
 /* ---- V2.2 ��Ӧʽ ---- */
 @media (max-width: 960px) {

@@ -15,6 +15,7 @@ import socket
 import sys
 import threading
 import time
+from pathlib import Path
 
 import uvicorn
 import webview
@@ -113,6 +114,13 @@ def main():
         sys.exit(1)
 
     # 启动 pywebview 桌面窗口（内嵌网页，不会弹出系统浏览器）
+    # 窗口图标：源码运行取项目根 assets/app.ico，打包后取运行时资源目录
+    _icon = None
+    for _base in (Path(os.path.dirname(os.path.abspath(__file__))),
+                  Path(getattr(sys, "_MEIPASS", "")) if getattr(sys, "_MEIPASS", "") else None):
+        if _base and (_base / "assets" / "app.ico").is_file():
+            _icon = str(_base / "assets" / "app.ico")
+            break
     window = webview.create_window(
         title=f"{APP_TITLE} v{CURRENT_VERSION} · Minecraft 双源模组迁移工具",
         url=url,
@@ -120,6 +128,7 @@ def main():
         height=840,
         min_size=(980, 680),
         text_select=True,
+        icon=_icon,
     )
     # 页面加载完成后挂载拖拽监听（获取拖入文件的完整绝对路径）
     window.events.loaded += lambda: _setup_drag_drop(window)

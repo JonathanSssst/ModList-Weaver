@@ -404,6 +404,20 @@ class TaskManager:
                 result.append(dict(h["state"]))
         return result
 
+    def clear_history(self):
+        """清空终态任务历史及对应日志文件，返回清理条数"""
+        removed = len(self.history_order)
+        tids = list(self.history_order)
+        self.history_map.clear()
+        self.history_order.clear()
+        self._persist()
+        for tid in tids:
+            try:
+                (self._logs_dir / f"{tid}.log").unlink(missing_ok=True)
+            except OSError:
+                pass
+        return removed
+
     # ---------- 队列调度 ----------
 
     def _current(self):

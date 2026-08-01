@@ -26,6 +26,8 @@ a = Analysis(
     datas=[
         # 前端静态资源打包进运行时根目录
         ('frontend', 'frontend'),
+        # 应用图标（窗口/可执行文件）
+        ('assets', 'assets'),
     ],
     hiddenimports=[
         'uvicorn.logging',
@@ -75,7 +77,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,            # 桌面工具，不弹控制台黑窗
-    icon=None,                # 如有图标可填 'assets/app.ico'
+    icon=os.path.join(BASE_DIR, 'assets', 'app.ico'),
 )
 
 coll = COLLECT(

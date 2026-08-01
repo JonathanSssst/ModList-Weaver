@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ModList-Weaver v3.1.0 · Minecraft 双源模组迁移工具</title>
+    <title>ModList-Weaver v3.2.0 · Minecraft 双源模组迁移工具</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -22,7 +22,7 @@
                 </div>
                 <div class="sidebar-brand-text">
                     <div class="sb-title">ModList-Weaver</div>
-                    <div class="sb-sub">模组迁移工具 v3.1.0</div>
+                    <div class="sb-sub">模组迁移工具 v3.2.0</div>
                 </div>
             </div>
 
@@ -763,7 +763,7 @@
                                 </div>
                                 <div class="about-hero-main">
                                     <div class="about-name">ModList-Weaver</div>
-                                    <div class="about-ver">版本 v3.1.0</div>
+                                    <div class="about-ver">版本 v3.2.0</div>
                                     <div class="about-desc">Minecraft 双源（Modrinth + CurseForge）模组迁移工具：扫描旧版本 mods 目录、导出 modlist.json、批量 / 单模组下载。</div>
                                     <div class="about-update-row">
                                         <button class="btn btn-outline btn-sm" id="btnCheckAppUpdate">检查更新</button>
@@ -780,7 +780,6 @@
                         </div>
                         <div class="card-body">
                             <div class="about-author">
-                                <img class="author-avatar lg" src="/static/src/images/head.png" alt="LSssT" />
                                 <div>
                                     <div class="author-name">LSssT</div>
                                     <a class="about-link" href="https://github.com/JonathanSssst" target="_blank">https://github.com/JonathanSssst</a>
@@ -797,10 +796,26 @@
                             <div class="changelog-section" id="changelogRoot">
                                 <div class="cl-item cl-fold" data-open="1">
                                     <div class="cl-head" role="button" title="点击展开/收起">
-                                        <span class="cl-ver">v3.1.0</span>
+                                        <span class="cl-ver">v3.2.0</span>
                                         <span class="cl-fold-hint">▾</span>
                                     </div>
                                     <div class="cl-date">2026-08 · 最新正式版</div>
+                                    <div class="cl-fold-body">
+                                        <div class="cl-title">打开源页面 · 存储清理 · 应用图标 · 下载完成通知 · 移除作者头像</div>
+                                        <ul class="cl-list">
+                                            <li><b>【打开源页面】</b>模组列表 / 模组目录 / 详情页新增「源页面」按钮，一键跳转 Modrinth / CurseForge 项目主页。</li>
+                                            <li><b>【存储与清理】</b>设置页新增「存储与清理」：展示日志 / 导入临时文件 / 任务历史占用，支持一键清理。</li>
+                                            <li><b>【应用图标】</b>新增应用图标（assets/app.ico），可执行文件与窗口图标统一。</li>
+                                            <li><b>【下载完成通知】</b>全部任务结束时 toast + 提示音 + 系统通知提醒，并汇总成功 / 失败数量。</li>
+                                            <li>「关于」页移除作者头像（head.png），仅保留作者名与 GitHub 链接。</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">v3.1.0</span>
+                                        <span class="cl-fold-hint">▸</span>
+                                    </div>
                                     <div class="cl-fold-body">
                                         <div class="cl-title">模组更新检测 · 软件自动更新 · 断点恢复 · 拖拽导入</div>
                                         <ul class="cl-list">
@@ -1008,6 +1023,28 @@
                                         <option value="dark">深色</option>
                                     </select>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">🗑</span> 存储与清理</div>
+                            <span class="field-hint" id="storageHint"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="storage-row" id="storageRow">
+                                <div class="storage-meta">
+                                    <div class="storage-line">日志缓存：<b id="stLogs">…</b></div>
+                                    <div class="storage-line">导入临时文件：<b id="stDropped">…</b></div>
+                                    <div class="storage-line">已完成任务历史：<b id="stHistory">…</b> 条</div>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button class="btn btn-outline btn-sm" id="btnClearLogs">清理日志</button>
+                                <button class="btn btn-outline btn-sm" id="btnClearDropped">清理导入临时文件</button>
+                                <button class="btn btn-outline btn-sm" id="btnClearHistory">清理任务历史</button>
+                                <button class="btn btn-outline btn-sm" id="btnRefreshStorage">刷新</button>
                             </div>
                         </div>
                     </div>

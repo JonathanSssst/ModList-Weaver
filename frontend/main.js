@@ -181,6 +181,7 @@ const state = {
     logModalTid: null,    // 日志弹窗当前任务
     logModalTimer: null,
     updateMap: {},        // project_id -> 更新信息（检查更新结果，V3.1）
+    wasDownloading: false, // 是否有任务进行中（完成通知判定，V3.2）
 };
 
 // 模组列表页（页面 C）：搜索状态
@@ -241,6 +242,7 @@ function switchPage(pageId) {
     }
     if (pageId === "pageH") {
         loadSettings();
+        refreshStorageInfo();
     }
 }
 
@@ -387,6 +389,16 @@ document.getElementById("btnScan").addEventListener("click", async () => {
 });
 
 // ---------- 步骤 2：勾选模组 ----------
+function openSourcePage(pid, source) {
+    if (!pid) return;
+    getJSON(`${API}/project_page?project_id=${encodeURIComponent(pid)}${source ? "&source=" + encodeURIComponent(source) : ""}`)
+        .then(r => {
+            if (r && r.url) window.open(r.url, "_blank");
+            else toast("未找到源页面", "err");
+        })
+        .catch(e => toast("打开源页面失败：" + e.message, "err"));
+}
+
 function renderModList(mods) {
     const box = document.getElementById("modList");
     if (!mods.length) {
@@ -424,7 +436,16 @@ function renderModList(mods) {
             ${badge}
             ${updBadge}
             <span class="m-size">${formatBytes(m.size)}</span>
-            <span class="m-open">›</span>
+            <span class="m-open">
+                ${m.matched ? `<button class="m-ext" title="打开源页面" data-ext="${escapeHtml(m.project_id)}" data-src="${escapeHtml(m.source || "")}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                </button>` : ""}
+                <span class="m-open-chev">›</span>
+            </span>
         </div>`;
     }).join("");
     box.querySelectorAll(".m-check").forEach(cb => {
@@ -437,6 +458,12 @@ function renderModList(mods) {
 }
 
 document.getElementById("modList").addEventListener("click", (e) => {
+    const ext = e.target.closest(".m-ext");
+    if (ext) {
+        e.stopPropagation();
+        openSourcePage(ext.dataset.ext, ext.dataset.src);
+        return;
+    }
     const item = e.target.closest(".mod-item");
     if (!item || e.target.closest(".m-check")) return;
     const pid = item.dataset.pid;
@@ -825,12 +852,27 @@ function renderCatalog(hits) {
                 <span class="cat-stat"><b>${formatCount(h.downloads)}</b> 下载</span>
                 <span class="cat-stat"><b>${formatCount(h.followers)}</b> 收藏</span>
             </div>
-            <span class="cat-open">›</span>
+            <span class="cat-open">
+                <button class="m-ext" title="打开源页面" data-ext="${escapeHtml(h.project_id)}" data-src="modrinth">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                </button>
+                <span class="cat-open-chev">›</span>
+            </span>
         </div>`;
     }).join("");
 }
 
 document.getElementById("modCatalog").addEventListener("click", (e) => {
+    const ext = e.target.closest(".m-ext");
+    if (ext) {
+        e.stopPropagation();
+        openSourcePage(ext.dataset.ext, ext.dataset.src);
+        return;
+    }
     const item = e.target.closest(".cat-item");
     if (item) openDetail(item.dataset.pid);
 });
@@ -858,8 +900,10 @@ async function loadDetail(pid) {
         </div>`;
     try {
         const data = await getJSON(`${API}/project/${encodeURIComponent(pid)}`);
+        lastDetail = data;
         renderDetail(box, data);
     } catch (e) {
+        lastDetail = null;
         box.innerHTML = `
             <div class="empty-state compact">
                 <div class="empty-state-title">加载详情失败</div>
@@ -867,6 +911,8 @@ async function loadDetail(pid) {
             </div>`;
     }
 }
+
+let lastDetail = null;
 
 function renderDetail(box, d) {
     const titleEl = document.getElementById("detailTitle");
@@ -911,6 +957,7 @@ function renderDetail(box, d) {
                         <div class="d-title-line">
                             <h3 class="d-title">${escapeHtml(d.title)}</h3>
                             <span class="chip">${escapeHtml(d.project_type || "mod")}</span>
+                            <button class="btn btn-outline btn-sm" id="btnOpenSourcePage">源页面</button>
                         </div>
                         <div class="d-sub">${escapeHtml(d.project_id)}${d.slug ? " · " + escapeHtml(d.slug) : ""}</div>
                         <p class="d-desc">${escapeHtml(d.description || "（无简介）")}</p>
@@ -996,6 +1043,11 @@ document.getElementById("modDetail").addEventListener("click", async (e) => {
     if (browse) {
         const data = await getJSON(`${API}/pick_folder?title=选择模组保存目录`);
         if (data.folder) document.getElementById("dlSaveDir").value = data.folder;
+        return;
+    }
+    const ext = e.target.closest("#btnOpenSourcePage");
+    if (ext) {
+        if (lastDetail) openSourcePage(lastDetail.project_id, lastDetail.source);
         return;
     }
     const dl = e.target.closest("#btnDlDownload");
@@ -1528,18 +1580,67 @@ function startQueuePoll() {
     pollTimer = setInterval(pollQueue, 900);
 }
 
+// 下载完成通知（V3.2）：全部任务结束时 toast + 提示音 + 系统通知
+let downloadDoneNotified = false;
+let stateHistoryLen = 0;
+
+function notifyDownloadsDone(hist) {
+    downloadDoneNotified = true;
+    const ok = hist.reduce((a, h) => a + (h.success_count || 0), 0);
+    const fail = hist.reduce((a, h) => a + (h.failed_count || 0), 0);
+    const msg = fail > 0
+        ? `全部任务已完成：成功 ${ok}，失败 ${fail}（详见任务中心）`
+        : `全部任务已完成：成功 ${ok} 个模组`;
+    toast(msg, fail > 0 ? "warn" : "ok");
+    try {
+        if (window.Notification && Notification.permission === "granted") {
+            new Notification("ModList-Weaver", { body: msg });
+        }
+    } catch (_) {}
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        [880, 1108, 1318].forEach((f, i) => {
+            const t = i * 0.18;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.type = "sine";
+            osc.frequency.value = f;
+            gain.gain.setValueAtTime(0.12, ctx.currentTime + t);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.16);
+            osc.start(ctx.currentTime + t); osc.stop(ctx.currentTime + t + 0.17);
+        });
+    } catch (_) {}
+}
+
 async function pollQueue() {
     try {
         const data = await getJSON(`${API}/queue`);
-        state.queue = data.tasks || [];
-        state.history = data.history || [];
-        renderActiveTasks(state.queue);
-        renderHistoryTasks(state.history);
+        const tasks = data.tasks || [];
+        const hist = data.history || [];
+        state.queue = tasks;
+        state.history = hist;
+        renderActiveTasks(tasks);
+        renderHistoryTasks(hist);
         if (state.settleTaskId) {
-            const h = state.history.find(x => x.task_id === state.settleTaskId);
+            const h = hist.find(x => x.task_id === state.settleTaskId);
             if (h) renderSettlement(h);
             else { state.settleTaskId = null; showQueueView("list"); }
         }
+        // 下载完成检测：有任务进行中 → 置位；从有→无 → 通知一次
+        const hasActive = tasks.some(t =>
+            t.status === "running" || t.status === "paused" || t.status === "pending");
+        if (hasActive) {
+            state.wasDownloading = true;
+            downloadDoneNotified = false;
+        } else if (state.wasDownloading && !downloadDoneNotified) {
+            const fresh = hist.length > stateHistoryLen
+                ? hist.slice(0, hist.length - stateHistoryLen)
+                : hist.slice(0, 3);
+            state.wasDownloading = false;
+            notifyDownloadsDone(fresh.length ? fresh : hist.slice(0, 3));
+        }
+        stateHistoryLen = hist.length;
     } catch (_) { /* 轮询出错静默，下次重试 */ }
 }
 
@@ -1591,6 +1692,47 @@ document.getElementById("btnSaveSettings").addEventListener("click", async () =>
         btn.disabled = false;
     }
 });
+
+// ---------- 存储与清理（V3.2） ----------
+function formatCacheBytes(n) {
+    if (!n) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    let i = 0;
+    let v = n;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return v.toFixed(v >= 100 || i === 0 ? 0 : 1) + " " + units[i];
+}
+
+async function refreshStorageInfo() {
+    try {
+        const s = await getJSON(`${API}/storage_info`);
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        set("stLogs", formatCacheBytes(s.logs_bytes));
+        set("stDropped", formatCacheBytes(s.dropped_bytes));
+        set("stHistory", String(s.history_count));
+        const hint = document.getElementById("storageHint");
+        if (hint) hint.textContent = `缓存总计 ${formatCacheBytes(s.total_bytes)}`;
+    } catch (_) {}
+}
+
+async function clearCacheKind(what, label) {
+    const el = document.getElementById(`btnClear${label}`);
+    if (el) el.disabled = true;
+    try {
+        const r = await postJSON(`${API}/clear_cache`, { what });
+        toast(`已清理${label === "History" ? "任务历史" : label === "Logs" ? "日志" : "导入临时文件"}（${r.removed} 项）`, "ok");
+    } catch (e) {
+        toast("清理失败：" + e.message, "err");
+    } finally {
+        if (el) el.disabled = false;
+        refreshStorageInfo();
+    }
+}
+
+document.getElementById("btnRefreshStorage").addEventListener("click", refreshStorageInfo);
+document.getElementById("btnClearLogs").addEventListener("click", () => clearCacheKind("logs", "Logs"));
+document.getElementById("btnClearDropped").addEventListener("click", () => clearCacheKind("dropped", "Dropped"));
+document.getElementById("btnClearHistory").addEventListener("click", () => clearCacheKind("history", "History"));
 
 // ================================================================
 // 软件更新检查（V3.1）：启动自动查 GitHub Release，发现新版本显示横幅
@@ -1747,6 +1889,12 @@ loadMcVersions();
 startQueuePoll();
 loadSettings();
 checkAppUpdate(false); // 启动检查软件更新（V3.1）
+// 请求系统通知权限（下载完成提示用，V3.2）；WebView2 可能不支持，静默失败
+try {
+    if (window.Notification && Notification.permission === "default") {
+        Notification.requestPermission();
+    }
+} catch (_) {}
 // 从后端拉取真实版本号覆盖静态显示（单一事实来源 backend.api.CURRENT_VERSION）
 // 并缓存 changelog 供「关于」页渲染
 (async function bootstrapVersion() {

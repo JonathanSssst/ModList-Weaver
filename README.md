@@ -2,7 +2,7 @@
 
 > Minecraft 双源（Modrinth / CurseForge）模组迁移桌面工具 —— 一键扫描本地 mods，导出模组清单，跨版本/跨加载器批量重下载，自带断点续传、哈希校验、依赖递归与任务队列。
 
-当前版本：**v3.1.0** · 平台：Windows x64（PyInstaller 打包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
+当前版本：**v3.2.0** · 平台：Windows x64（PyInstaller 打包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
 
 ---
 
@@ -63,7 +63,7 @@ pip install pytest pytest-asyncio
 python -m pytest tests -v --tb=short
 ```
 
-预期输出：29 个用例全部 PASS。
+预期输出：39 个用例全部 PASS。
 
 ### 本地打包
 
@@ -135,6 +135,14 @@ pyinstaller build.spec
 - pywebview 内嵌 WebView2，原生 HTML/CSS/JS 实现
 - 明暗主题一键切换，偏好持久化
 - 向导式工作流（扫描导出三步、批量下载四步）
+- 应用图标：源码运行与打包后均带自定义图标（`assets/app.ico`）
+- 模组任意位置「打开源页面」：清单行 / 目录 / 详情页一键跳转原始项目页
+
+### 8. 下载完成通知与存储清理（V3.2）
+
+- 全部任务结束后弹系统通知 + 三音提示，汇总成功 / 失败 / 跳过数
+- 设置页「存储与清理」：一键清空任务日志、导入临时文件、历史记录并统计占用
+- 需在浏览器 / WebView 中允许桌面通知权限
 
 ---
 
@@ -149,7 +157,7 @@ pyinstaller build.spec
 | 模组元数据解析 | zipfile + tomllib（无需 Java 环境） |
 | 哈希算法 | hashlib（sha512 / sha1）+ 自实现 Java 兼容 MurmurHash2 |
 | 打包 | PyInstaller（目录模式 COLLECT） |
-| 测试 | pytest + pytest-asyncio（29 用例） |
+| 测试 | pytest + pytest-asyncio（39 用例） |
 | CI/CD | GitHub Actions（2 OS × 3 Python 矩阵 + 自动 Release） |
 
 ---
@@ -175,16 +183,17 @@ ModList-Weaver/
 ├── frontend/                   # 前端：原生 HTML/CSS/JS
 │   ├── index.html              # 单页应用外壳 + 8 个页面 (A~H)
 │   ├── main.js                 # 交互逻辑（侧边栏 / 向导 / 轮询 / 主题）
-│   ├── style.css               # 明暗主题样式
-│   └── src/images/             # 静态图片（作者头像等）
+│   └── style.css               # 明暗主题样式
 │
-├── static/                     # PyInstaller 打包态前端资源备份
+├── assets/                      # 应用图标（app.ico / app.png，打包用）
 │
 ├── tests/                      # pytest 单元测试
 │   ├── __init__.py
 │   ├── test_scanner.py         # 哈希计算 / jar 元数据解析
 │   ├── test_downloader_logic.py# 版本选择 / TaskGate / 限速器 / 哈希策略
-│   └── test_curseforge_and_settings.py  # murmur2 / Settings 持久化
+│   ├── test_curseforge_and_settings.py  # murmur2 / Settings 持久化
+│   ├── test_resume_and_updates.py      # 断点恢复 / 版本比较 / 更新检测 / 清单导入
+│   └── test_qol_v32.py                # 源页面跳转 / 存储统计与清理（V3.2）
 │
 ├── .github/workflows/ci.yml    # GitHub Actions：测试矩阵 + 打包 + Release
 ├── .gitignore
@@ -222,6 +231,7 @@ ModList-Weaver/
 | --- | --- | --- |
 | POST | `/api/search_mod` | 关键词搜索模组（支持 `source` 切换双源） |
 | GET | `/api/project/{id}` | 模组详情：图标 / 作者 / 版本列表 / 更新日志 |
+| GET | `/api/project_page` | 模组主页 URL（「打开源页面」用，V3.2） |
 
 ### 下载
 
@@ -250,6 +260,8 @@ ModList-Weaver/
 | GET | `/api/logs/{id}/download` | 导出日志为 `.log` 文件 |
 | GET | `/api/settings` | 读取当前设置 |
 | POST | `/api/settings` | 更新设置（即时生效） |
+| GET | `/api/storage_info` | 缓存占用统计（日志 / 临时文件 / 历史，V3.2） |
+| POST | `/api/clear_cache` | 清理缓存：logs / dropped / history（V3.2） |
 
 ### 原生对话框
 
@@ -317,6 +329,14 @@ project.source 字段优先级最高
 ## 版本历史
 
 完整 Changelog 在软件内「更新日志」页动态渲染（数据源：`backend/api.py:CHANGELOG`）。
+
+### v3.2.0（2026-08）· 打开源页面 + 存储清理 + 应用图标 + 下载完成通知 + 移除作者头像
+
+- **打开源页面**：模组列表 / 模组目录 / 详情页新增「源页面」按钮，一键跳转 Modrinth / CurseForge 项目主页
+- **存储与清理**：设置页展示日志 / 导入临时文件 / 任务历史占用，支持一键清理（`/api/storage_info`、`/api/clear_cache`）
+- **应用图标**：新增 `assets/app.ico`，可执行文件与窗口图标统一
+- **下载完成通知**：全部任务结束时 toast + 提示音 + 系统通知，汇总成功 / 失败数量
+- 「关于」页移除作者头像（head.png），删除 `frontend/src/images/`
 
 ### v3.1.0（2026-08）· 模组更新检测 + 软件自动更新 + 断点恢复 + 拖拽导入
 

@@ -8,6 +8,7 @@
   POST /api/download_from_list   读取 modlist 启动批量下载（进入下载队列）
   POST /api/search_mod           关键词搜索 Modrinth 模组（分页/筛选）
   GET  /api/project/{id}         模组详情（图标/版本/作者/简介）
+  GET  /api/project_page         模组主页 URL（「打开源页面」用，V3.2）
   GET  /api/mc_versions          获取 Minecraft 官方版本列表（下拉框用）
   POST /api/download_single_mod  单模组 + 前置依赖下载（进入下载队列）
   GET  /api/queue                下载队列快照（进行中 + 已完成历史）
@@ -25,6 +26,8 @@
   GET  /api/pick_save            原生保存路径对话框
   GET  /api/check_app_update     检查软件是否有新版本（GitHub Release，V3.1）
   POST /api/import_modlist       导入拖拽的 modlist.json 内容（V3.1）
+  GET  /api/storage_info         缓存占用统计（日志/临时文件/历史，V3.2）
+  POST /api/clear_cache          清理缓存：logs / dropped / history（V3.2）
 """
 import json
 import os
@@ -51,12 +54,24 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.1.0"
+CURRENT_VERSION = "3.2.0"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.2.0",
+        "date": "2026-08",
+        "title": "打开源页面 · 存储清理 · 应用图标 · 下载完成通知 · 移除作者头像",
+        "items": [
+            "【打开源页面】模组列表 / 模组目录 / 详情页新增「源页面」按钮，一键跳转 Modrinth / CurseForge 项目主页。",
+            "【存储与清理】设置页新增「存储与清理」：展示日志 / 导入临时文件 / 任务历史占用，支持一键清理。",
+            "【应用图标】新增应用图标（assets/app.ico），可执行文件与窗口图标统一。",
+            "【下载完成通知】全部任务结束时 toast + 提示音 + 系统通知提醒，并汇总成功 / 失败数量。",
+            "「关于」页移除作者头像（head.png），仅保留作者名与 GitHub 链接。",
+        ],
+    },
     {
         "version": "3.1.0",
         "date": "2026-08",
@@ -863,6 +878,36 @@ async def api_project_detail(project_id: str, source: Optional[str] = None):
     }
 
 
+@app.get("/api/project_page")
+async def api_project_page(project_id: str, source: Optional[str] = None):
+    """返回模组在所属平台的主页 URL（「打开源页面」用）
+
+    Modrinth 的 project_id 即 slug，可直接拼 URL；CurseForge 需先解析 slug，
+    解析失败时回退到平台内搜索页。
+    """
+    src = (source or "").strip().lower()
+
+    async def _cf_url(pid):
+        try:
+            p = await cf_client.get_project(pid)
+            slug = (p or {}).get("slug")
+            if slug:
+                return f"https://www.curseforge.com/minecraft/mc-mods/{slug}"
+        except Exception:
+            pass
+        return f"https://www.curseforge.com/minecraft/search?search={project_id}"
+
+    if src == "modrinth":
+        return {"url": f"https://modrinth.com/project/{project_id}", "source": "modrinth"}
+    if src == "curseforge":
+        url = await _cf_url(int(project_id) if project_id.isdigit() else project_id)
+        return {"url": url, "source": "curseforge"}
+    # 未指定源：纯数字 → CurseForge，否则 → Modrinth
+    if project_id.isdigit():
+        return {"url": await _cf_url(int(project_id)), "source": "curseforge"}
+    return {"url": f"https://modrinth.com/project/{project_id}", "source": "modrinth"}
+
+
 # ==================== 下载队列控制 ====================
 
 @app.get("/api/queue")
@@ -878,6 +923,65 @@ def api_queue():
 def api_get_settings():
     """读取当前设置（并发数 / 网速限制 / 主题）"""
     return get_settings().get()
+
+
+@app.get("/api/storage_info")
+def api_storage_info():
+    """缓存占用统计（日志 / 导入临时文件 / 历史任务数），V3.2"""
+    logs_dir = task_manager._logs_dir
+    temp_dir = task_manager._temp_dir
+    dropped_dir = temp_dir / "dropped"
+
+    def _size(p):
+        total = 0
+        try:
+            for f in p.rglob("*"):
+                if f.is_file():
+                    total += f.stat().st_size
+        except OSError:
+            pass
+        return total
+
+    logs_bytes = _size(logs_dir)
+    dropped_bytes = _size(dropped_dir)
+    return {
+        "logs_bytes": logs_bytes,
+        "dropped_bytes": dropped_bytes,
+        "history_count": len(task_manager.history_order),
+        "active_count": len(task_manager.tasks),
+        "total_bytes": logs_bytes + dropped_bytes + _size(temp_dir),
+    }
+
+
+class ClearCacheRequest(BaseModel):
+    what: str  # "logs" / "dropped" / "history"
+
+
+@app.post("/api/clear_cache")
+def api_clear_cache(req: ClearCacheRequest):
+    """清理缓存：logs=日志文件 / dropped=导入临时文件 / history=终态任务历史"""
+    what = (req.what or "").strip().lower()
+    removed = 0
+    if what == "logs":
+        for f in task_manager._logs_dir.glob("*.log"):
+            try:
+                f.unlink()
+                removed += 1
+            except OSError:
+                pass
+    elif what == "dropped":
+        d = task_manager._temp_dir / "dropped"
+        for f in d.glob("*"):
+            try:
+                f.unlink()
+                removed += 1
+            except OSError:
+                pass
+    elif what == "history":
+        removed = task_manager.clear_history()
+    else:
+        raise HTTPException(status_code=400, detail="what 必须是 logs / dropped / history")
+    return {"removed": removed}
 
 
 @app.post("/api/settings")
