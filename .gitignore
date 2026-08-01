@@ -19,6 +19,8 @@ lib64/
 parts/
 sdist/
 var/
+mods/
+output/
 wheels/
 *.egg-info/
 .installed.cfg
@@ -34,10 +36,8 @@ venv
 
 # Runtime data (用户数据与缓存，不应入库)
 cache/
-mods/*
-!mods/.gitkeep
-output/*
-!output/.gitkeep
+mods/
+output/
 
 # Logs
 *.log
