@@ -1,6 +1,6 @@
 # ModList-Weaver
 
-> Minecraft 双源（Modrinth / CurseForge）模组迁移桌面工具 —— 一键扫描本地 mods，导出 HMCL 兼容清单，跨版本/跨加载器批量重下载，自带断点续传、哈希校验、依赖递归与任务队列。
+> Minecraft 双源（Modrinth / CurseForge）模组迁移桌面工具 —— 一键扫描本地 mods，导出模组清单，跨版本/跨加载器批量重下载，自带断点续传、哈希校验、依赖递归与任务队列。
 
 当前版本：**v3.0.0** · 平台：Windows x64（PyInstaller 打包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
 
@@ -213,7 +213,7 @@ ModList-Weaver/
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | `/api/scan_mods` | 扫描 mods 目录，多源哈希反查 project_id |
-| POST | `/api/export_json` | 生成 HMCL 兼容 modlist.json 并保存 |
+| POST | `/api/export_json` | 生成 modlist.json 并保存 |
 | POST | `/api/preview_list` | 解析 modlist.json 返回清单（下载前勾选用） |
 
 ### 搜索与详情
@@ -275,7 +275,7 @@ ModList-Weaver/
    ↓
 勾选要导出的模组（未识别标灰置顶）
    ↓
-导出 HMCL 兼容 modlist.json（含 source 字段）
+导出 modlist.json（含 source 字段）
 ```
 
 ### B. 批量下载（四步向导）
@@ -365,7 +365,7 @@ project.source 字段优先级最高
 ### v1.0（2026-04）· MVP 首发
 
 - 扫描 mods 目录并通过文件哈希反查 Modrinth
-- 导出 HMCL 兼容 modlist.json
+- 导出 modlist.json
 - 批量 / 单模组下载（自动解析 required 前置依赖）
 
 ---

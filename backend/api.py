@@ -3,7 +3,7 @@
 接口列表：
   GET  /api/version              当前软件版本 + 版本历史（Changelog）
   POST /api/scan_mods            扫描 mods 目录，返回模组列表 + project_id 反查结果
-  POST /api/export_json          生成 HMCL 兼容 modlist 并保存本地
+  POST /api/export_json          生成 modlist 并保存本地
   POST /api/download_from_list   读取 modlist 启动批量下载（进入下载队列）
   POST /api/search_mod           关键词搜索 Modrinth 模组（分页/筛选）
   GET  /api/project/{id}         模组详情（图标/版本/作者/简介）
@@ -133,7 +133,7 @@ CHANGELOG = [
         "title": "MVP 首发：扫描 → 导出 → 批量下载",
         "items": [
             "扫描 mods 目录并通过文件哈希反查 Modrinth 项目。",
-            "导出 HMCL 兼容 modlist.json。",
+            "导出 modlist.json。",
             "批量 / 单模组下载（自动解析 required 前置依赖）。",
         ],
     },
@@ -385,9 +385,9 @@ async def api_scan_mods(req: ScanRequest):
 
 @app.post("/api/export_json")
 async def api_export_json(req: ExportRequest):
-    """生成 HMCL 兼容 modlist 并保存本地（含多源 source 字段，V3.0）
+    """生成 modlist 并保存本地（含多源 source 字段，V3.0）
 
-    结构与 HMCL 导出清单保持一致，核心字段 projects:[{project_id, source, ...}]
+    结构与清单保持一致，核心字段 projects:[{project_id, source, ...}]
     仅导出成功识别到 project_id 的模组。
     """
     projects = []

@@ -758,7 +758,7 @@ async def _export_missing(state, save_dir):
 
 async def run_batch_download(mr_client, json_path, mc_version, loader, save_dir, task_state, gate,
                              project_ids=None, cf_client=None, global_source=None):
-    """批量下载：读取 HMCL 兼容 modlist，逐个解析下载（多源版本）
+    """批量下载：读取 modlist，逐个解析下载（多源版本）
 
     :param mr_client: ModrinthClient
     :param cf_client:  CurseForgeClient（可 None）

@@ -1577,7 +1577,7 @@ loadSettings();
         if (aboutVer && ver) aboutVer.textContent = `版本 v${ver}`;
         const aboutDesc = document.querySelector(".about-desc");
         if (aboutDesc) {
-            aboutDesc.textContent = "Minecraft 双源（Modrinth + CurseForge）模组迁移工具：扫描旧版本 mods 目录、导出 HMCL 兼容清单、批量 / 单模组下载。";
+            aboutDesc.textContent = "Minecraft 双源（Modrinth + CurseForge）模组迁移工具：扫描旧版本 mods 目录、导出 modlist.json 清单、批量 / 单模组下载。";
         }
         // 浏览器标题
         if (v.display) document.title = `${v.display} · Minecraft 双源模组迁移工具`;
