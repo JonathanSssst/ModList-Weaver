@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ModList-Weaver · Modrinth 模组迁移工具</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+    <!-- 应用整体外壳 -->
+    <div class="app-shell" id="appShell">
+
+        <!-- ==================== 侧边栏（可折叠） ==================== -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                        <line x1="12" y1="22.08" x2="12" y2="12"/>
+                    </svg>
+                </div>
+                <div class="sidebar-brand-text">
+                    <div class="sb-title">ModList-Weaver</div>
+                    <div class="sb-sub">模组迁移工具 v2.5</div>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-group-title">工作流</div>
+
+                <!-- A：扫描导出（三步向导） -->
+                <a href="#" class="nav-item active" data-page="pageA">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            <polyline points="8 14 12 10 16 14"/>
+                            <line x1="12" y1="10" x2="12" y2="18"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">扫描 &amp; 导出清单</span>
+                    <span class="nav-badge">A</span>
+                </a>
+
+                <!-- B：批量下载（三步向导） -->
+                <a href="#" class="nav-item" data-page="pageB">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">批量下载模组</span>
+                    <span class="nav-badge">B</span>
+                </a>
+
+                <!-- C：模组列表（无步骤） -->
+                <a href="#" class="nav-item" data-page="pageC">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+                            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+                            <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+                            <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">模组列表</span>
+                    <span class="nav-badge">C</span>
+                </a>
+
+                <div class="nav-group-title">运维</div>
+
+                <!-- D：任务中心 -->
+                <a href="#" class="nav-item" data-page="pageD">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">任务中心</span>
+                    <span class="nav-badge">D</span>
+                </a>
+
+                <div class="nav-group-title">更多</div>
+
+                <!-- F：关于 -->
+                <a href="#" class="nav-item" data-page="pageF">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="16" x2="12" y2="12"/>
+                            <line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">关于</span>
+                    <span class="nav-badge">F</span>
+                </a>
+
+                <!-- G：更新日志 -->
+                <a href="#" class="nav-item" data-page="pageG">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 20h9"/>
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">更新日志</span>
+                    <span class="nav-badge">G</span>
+                </a>
+
+                <!-- H：设置 -->
+                <a href="#" class="nav-item" data-page="pageH">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">设置</span>
+                    <span class="nav-badge">H</span>
+                </a>
+            </nav>
+
+            <button class="sidebar-toggle" id="sidebarToggle" title="折叠侧边栏">
+                <svg id="toggleIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"/>
+                </svg>
+            </button>
+        </aside>
+
+        <!-- ==================== 主区域（顶部栏 + 内容） ==================== -->
+        <div class="main-area">
+
+            <header class="appbar">
+                <div class="appbar-left">
+                    <button class="icon-btn" id="sidebarToggle2" title="折叠侧边栏">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="3" y1="12" x2="21" y2="12"/>
+                            <line x1="3" y1="6" x2="21" y2="6"/>
+                            <line x1="3" y1="18" x2="21" y2="18"/>
+                        </svg>
+                    </button>
+                    <div class="breadcrumb">
+                        <span class="bc-root" id="breadcrumbRoot">工作流</span>
+                        <span class="bc-sep">/</span>
+                        <span class="bc-current" id="breadcrumbCurrent">扫描 &amp; 导出清单</span>
+                    </div>
+                </div>
+                <div class="appbar-right">
+                    <button class="icon-btn" id="themeToggle" title="切换明暗主题">
+                        <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                        </svg>
+                    </button>
+                    <div class="mini-progress" id="miniProgress" style="display:none">
+                        <div class="mp-text">
+                            <span id="mpText">下载中</span>
+                            <span id="mpPct">0%</span>
+                        </div>
+                        <div class="mp-bar"><div class="mp-fill" id="mpFill"></div></div>
+                    </div>
+                    <div class="appbar-status" id="headerStatus">
+                        <span class="status-dot"></span>
+                        <span>就绪</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="content-wrapper">
+
+                <!-- ==================== 页面 A：扫描 & 导出（三步向导） ==================== -->
+                <section class="page active" id="pageA">
+                    <div class="page-head">
+                        <div>
+                            <h2 class="page-title">扫描模组 &amp; 导出清单</h2>
+                        </div>
+                        <div class="page-stats" id="scanStat">
+                            <div class="stat-card stat-total">
+                                <div class="stat-num" id="statTotal">0</div>
+                                <div class="stat-label">扫描总数</div>
+                            </div>
+                            <div class="stat-card stat-ok">
+                                <div class="stat-num" id="statMatched">0</div>
+                                <div class="stat-label">已识别</div>
+                            </div>
+                            <div class="stat-card stat-warn">
+                                <div class="stat-num" id="statUnmatched">0</div>
+                                <div class="stat-label">未识别</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 步骤指示器 -->
+                    <div class="wizard" id="wizardSteps">
+                        <div class="wstep active" data-step="1">
+                            <span class="ws-num">1</span>
+                            <div class="ws-label"><b>扫描模组</b><small>选择旧版本 mods 目录</small></div>
+                        </div>
+                        <div class="ws-line"></div>
+                        <div class="wstep" data-step="2">
+                            <span class="ws-num">2</span>
+                            <div class="ws-label"><b>选择模组</b><small>勾选需导出的模组</small></div>
+                        </div>
+                        <div class="ws-line"></div>
+                        <div class="wstep" data-step="3">
+                            <span class="ws-num">3</span>
+                            <div class="ws-label"><b>导出清单</b><small>生成 HMCL 兼容 Json</small></div>
+                        </div>
+                    </div>
+
+                    <!-- 步骤 1：扫描 -->
+                    <div class="wizard-view active" id="step-scan">
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">1</span> 扫描 mods 目录</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-row">
+                                    <div class="form-field form-field-flex">
+                                        <label>模组目录路径</label>
+                                        <div class="input-group">
+                                            <input type="text" id="scanFolder" class="input" placeholder="选择或粘贴旧版本 mods 目录路径" />
+                                            <button class="btn btn-outline" id="btnBrowseScan">浏览文件夹</button>
+                                        </div>
+                                    </div>
+                                    <div class="form-field form-field-actions">
+                                        <button class="btn btn-primary" id="btnScan">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="11" cy="11" r="8"/>
+                                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                            </svg>
+                                            开始扫描
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wizard-actions">
+                            <span></span>
+                            <button class="btn btn-primary" id="btnScanNext" disabled>下一步：选择模组</button>
+                        </div>
+                    </div>
+
+                    <!-- 步骤 2：勾选模组 -->
+                    <div class="wizard-view" id="step-select">
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">2</span> 勾选需导出的模组</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="mod-toolbar">
+                                    <div class="mt-left">
+                                        <button class="btn btn-outline btn-sm" id="btnSelectAll">全选</button>
+                                        <button class="btn btn-outline btn-sm" id="btnSelectNone">清空</button>
+                                        <button class="btn btn-outline btn-sm" id="btnSelectInvert">反选</button>
+                                        <span class="mt-hint">已选 <b id="selCount">0</b> / <span id="selTotal">0</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body no-pad">
+                                <div class="mod-list" id="modList">
+                                    <div class="empty-state compact">
+                                        <div class="empty-state-title">暂无扫描结果</div>
+                                        <div class="empty-state-desc">请先在步骤 1 扫描 mods 目录。</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wizard-actions">
+                            <button class="btn btn-outline" id="btnSelPrev">上一步：扫描</button>
+                            <button class="btn btn-primary" id="btnSelNext">下一步：导出清单</button>
+                        </div>
+                    </div>
+
+                    <!-- 步骤 3：导出 -->
+                    <div class="wizard-view" id="step-export">
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">3</span> 导出 HMCL 兼容清单</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-row form-row-grid">
+                                    <div class="form-field">
+                                        <label>清单游戏版本（可选）</label>
+                                        <input type="text" id="exportMc" class="input" list="mcVersionsList" placeholder="选择或输入 MC 版本，如 1.20.1" />
+                                    </div>
+                                    <div class="form-field">
+                                        <label>清单加载器（可选）</label>
+                                        <select id="exportLoader" class="input">
+                                            <option value="">自动</option>
+                                            <option value="fabric">Fabric</option>
+                                            <option value="forge">Forge</option>
+                                            <option value="neoforge">NeoForge</option>
+                                            <option value="quilt">Quilt</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-field form-field-2col">
+                                        <label>保存路径</label>
+                                        <div class="input-group">
+                                            <input type="text" id="exportPath" class="input" placeholder="选择导出位置，如 D:\modlist.json" />
+                                            <button class="btn btn-outline" id="btnBrowseExport">浏览…</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wizard-actions">
+                            <button class="btn btn-outline" id="btnExpPrev">上一步：选择模组</button>
+                            <button class="btn btn-primary" id="btnExport">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                                导出为 Json
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==================== 页面 B：批量下载（三步向导） ==================== -->
+                <section class="page" id="pageB">
+                    <div class="page-head">
+                        <div>
+                            <h2 class="page-title">导入 JSON 清单 · 批量下载</h2>
+                        </div>
+                    </div>
+
+                    <!-- 步骤指示器 -->
+                    <div class="wizard" id="wizardBSteps">
+                        <div class="wstep active" data-step="1">
+                            <span class="ws-num">1</span>
+                            <div class="ws-label"><b>选择清单</b><small>选择 modlist.json</small></div>
+                        </div>
+                        <div class="ws-line"></div>
+                        <div class="wstep" data-step="2">
+                            <span class="ws-num">2</span>
+                            <div class="ws-label"><b>预览勾选</b><small>浏览并选择模组</small></div>
+                        </div>
+                        <div class="ws-line"></div>
+                        <div class="wstep" data-step="3">
+                            <span class="ws-num">3</span>
+                            <div class="ws-label"><b>目标配置</b><small>版本 / 加载器 / 保存目录</small></div>
+                        </div>
+                        <div class="ws-line"></div>
+                        <div class="wstep" data-step="4">
+                            <span class="ws-num">4</span>
+                            <div class="ws-label"><b>开始下载</b><small>确认信息并加入队列</small></div>
+                        </div>
+                    </div>
+
+                    <!-- 步骤 1：选择清单文件 -->
+                    <div class="wizard-view active" id="b-step-file">
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">1</span> 选择清单文件</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-field">
+                                    <label>modlist.json 路径</label>
+                                    <div class="input-group">
+                                        <input type="text" id="jsonPath" class="input" placeholder="选择 HMCL / 本工具导出的 modlist.json" />
+                                        <button class="btn btn-outline" id="btnBrowseJson">选择文件</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wizard-actions">
+                            <span></span>
+                            <button class="btn btn-primary" id="btnBStepNext" disabled>下一步：预览勾选</button>
+                        </div>
+                    </div>
+
+                    <!-- 步骤 2：预览并勾选模组 -->
+                    <div class="wizard-view" id="b-step-preview">
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">2</span> 预览清单并勾选模组</div>
+                                <span class="ch-hint" id="bpInfo">—</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="mod-toolbar">
+                                    <div class="mt-left">
+                                        <button class="btn btn-outline btn-sm" id="btnBPAll">全选</button>
+                                        <button class="btn btn-outline btn-sm" id="btnBPNone">清空</button>
+                                        <button class="btn btn-outline btn-sm" id="btnBPInvert">反选</button>
+                                        <span class="mt-hint">已选 <b id="bpSelCount">0</b> / <span id="bpSelTotal">0</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body no-pad">
+                                <div class="mod-list" id="bpList">
+                                    <div class="empty-state compact">
+                                        <div class="empty-state-title">正在加载清单…</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wizard-actions">
+                            <button class="btn btn-outline" id="btnBPPrev">上一步：选择清单</button>
+                            <button class="btn btn-primary" id="btnBPNext" disabled>下一步：目标配置</button>
+                        </div>
+                    </div>
+
+                    <!-- 步骤 3：配置目标版本与保存目录 -->
+                    <div class="wizard-view" id="b-step-config">
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">3</span> 配置目标版本与保存目录</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-row form-row-grid">
+                                    <div class="form-field">
+                                        <label>目标游戏版本</label>
+                                        <input type="text" id="batchMc" class="input" list="mcVersionsList" placeholder="选择或输入 MC 版本，如 1.21.1" />
+                                    </div>
+                                    <div class="form-field">
+                                        <label>目标加载器</label>
+                                        <select id="batchLoader" class="input">
+                                            <option value="fabric">Fabric</option>
+                                            <option value="forge">Forge</option>
+                                            <option value="neoforge">NeoForge</option>
+                                            <option value="quilt">Quilt</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-field form-field-2col">
+                                        <label>模组保存目录（新版本 mods 文件夹）</label>
+                                        <div class="input-group">
+                                            <input type="text" id="batchSaveDir" class="input" placeholder="新实例 mods 目录，如 .minecraft/versions/1.20.1/mods" />
+                                            <button class="btn btn-outline" id="btnBrowseBatchDir">浏览文件夹</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wizard-actions">
+                            <button class="btn btn-outline" id="btnBStepPrev">上一步：预览勾选</button>
+                            <button class="btn btn-primary" id="btnBStepGo">下一步：确认并下载</button>
+                        </div>
+                    </div>
+
+                    <!-- 步骤 4：确认并开始 -->
+                    <div class="wizard-view" id="b-step-go">
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">4</span> 确认信息并开始下载</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="confirm-grid">
+                                    <div class="confirm-item">
+                                        <span class="confirm-label">清单文件</span>
+                                        <b class="confirm-value" id="cfJsonPath">—</b>
+                                    </div>
+                                    <div class="confirm-item">
+                                        <span class="confirm-label">模组数量</span>
+                                        <b class="confirm-value" id="cfCount">—</b>
+                                    </div>
+                                    <div class="confirm-item">
+                                        <span class="confirm-label">目标版本</span>
+                                        <b class="confirm-value" id="cfMc">—</b>
+                                    </div>
+                                    <div class="confirm-item">
+                                        <span class="confirm-label">加载器</span>
+                                        <b class="confirm-value" id="cfLoader">—</b>
+                                    </div>
+                                    <div class="confirm-item">
+                                        <span class="confirm-label">保存目录</span>
+                                        <b class="confirm-value" id="cfSaveDir">—</b>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn btn-primary btn-lg" id="btnBatchDownload">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                            <polyline points="7 10 12 15 17 10"/>
+                                            <line x1="12" y1="15" x2="12" y2="3"/>
+                                        </svg>
+                                        开始批量下载
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wizard-actions">
+                            <button class="btn btn-outline" id="btnBGoPrev">上一步：目标配置</button>
+                            <span></span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==================== 页面 C：模组列表（列表 + 详情） ==================== -->
+                <section class="page" id="pageC">
+
+                    <!-- 子视图：模组列表 -->
+                    <div id="catListView">
+                        <div class="page-head">
+                            <div>
+                                <h2 class="page-title">模组列表</h2>
+                            </div>
+                            <div class="page-stats">
+                                <div class="stat-card stat-total">
+                                    <div class="stat-num" id="catTotal">0</div>
+                                    <div class="stat-label">结果数</div>
+                                </div>
+                                <div class="stat-card stat-ok">
+                                    <div class="stat-num" id="catCurPage">0</div>
+                                    <div class="stat-label">当前页</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title">搜索与筛选</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-row form-row-grid">
+                                    <div class="form-field">
+                                        <label>搜索关键词</label>
+                                        <input type="text" id="catQuery" class="input" placeholder="模组名称 / slug / project ID（留空浏览全部）" />
+                                    </div>
+                                    <div class="form-field">
+                                        <label>加载器</label>
+                                        <select id="catLoader" class="input">
+                                            <option value="">全部加载器</option>
+                                            <option value="fabric">Fabric</option>
+                                            <option value="forge">Forge</option>
+                                            <option value="neoforge">NeoForge</option>
+                                            <option value="quilt">Quilt</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-field">
+                                        <label>项目类型</label>
+                                        <select id="catType" class="input">
+                                            <option value="">全部类型</option>
+                                            <option value="mod">模组</option>
+                                            <option value="modpack">整合包</option>
+                                            <option value="resourcepack">资源包</option>
+                                            <option value="shader">光影</option>
+                                            <option value="datapack">数据包</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-field form-field-actions">
+                                        <button class="btn btn-primary" id="btnCatSearch">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="11" cy="11" r="8"/>
+                                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                            </svg>
+                                            搜索
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title">模组列表</div>
+                                <span class="ch-hint" id="catInfo">—</span>
+                            </div>
+                            <div class="card-body no-pad">
+                                <div class="mod-list" id="modCatalog">
+                                    <div class="empty-state compact">
+                                        <div class="empty-state-title">正在加载模组列表…</div>
+                                        <div class="empty-state-desc">首次进入自动分页加载 Modrinth 目录，也可输入关键词搜索。</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="pager">
+                                    <button class="btn btn-outline" id="btnCatPrev">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="15 18 9 12 15 6"/>
+                                        </svg>
+                                        上一页
+                                    </button>
+                                    <span class="pager-info">第 <b id="catPageNum">0</b> / <span id="catPageTotal">0</span> 页</span>
+                                    <button class="btn btn-outline" id="btnCatNext">下一页
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="9 18 15 12 9 6"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 子视图：模组详情 -->
+                    <div id="catDetailView" style="display:none">
+                        <div class="page-head page-head-simple">
+                            <button class="btn btn-outline" id="btnBackCatalog">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="15 18 9 12 15 6"/>
+                                </svg>
+                                返回列表
+                            </button>
+                            <div class="page-title-sm" id="detailTitle">模组详情</div>
+                        </div>
+                        <div class="detail-body" id="modDetail">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <line x1="12" y1="16" x2="12" y2="12"/>
+                                        <line x1="12" y1="8" x2="12.01" y2="8"/>
+                                    </svg>
+                                </div>
+                                <div class="empty-state-title">从列表、扫描结果或搜索结果中点击模组进入详情</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==================== 页面 D：任务中心 ==================== -->
+                <section class="page" id="pageD">
+
+                    <!-- 子视图：任务列表（进行中 + 已完成） -->
+                    <div id="dqListView">
+                        <div class="page-head">
+                            <div>
+                                <h2 class="page-title">任务中心</h2>
+                            </div>
+                            <div class="page-stats">
+                                <div class="stat-card stat-ok">
+                                    <div class="stat-num" id="runCount">0</div>
+                                    <div class="stat-label">运行中</div>
+                                </div>
+                                <div class="stat-card stat-total">
+                                    <div class="stat-num" id="queueCount">0</div>
+                                    <div class="stat-label">排队中</div>
+                                </div>
+                                <div class="stat-card stat-done">
+                                    <div class="stat-num" id="doneCount">0</div>
+                                    <div class="stat-label">已完成</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 进行中任务 -->
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">▷</span> 进行中任务</div>
+                            </div>
+                            <div class="card-body no-pad">
+                                <div class="queue-list" id="queueList">
+                                    <div class="empty-state compact">
+                                        <div class="empty-state-title">暂无进行中的任务</div>
+                                        <div class="empty-state-desc">在批量下载或单模组下载页发起任务后，将在此排队执行。</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 已完成任务 -->
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">✓</span> 已完成任务</div>
+                            </div>
+                            <div class="card-body no-pad">
+                                <div class="history-list" id="historyList">
+                                    <div class="empty-state compact">
+                                        <div class="empty-state-title">暂无已完成任务</div>
+                                        <div class="empty-state-desc">历史任务持久化保存在本机 cache/temp，重启后仍可查看。</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 选中进行中任务的详情面板 -->
+                        <div class="card" id="taskDetailCard" style="display:none">
+                            <div class="card-head">
+                                <div class="ch-title">
+                                    <span class="ch-step">●</span>
+                                    <span id="dTaskTitle">任务详情</span>
+                                    <span class="chip" id="dTaskBadge">—</span>
+                                </div>
+                                <div class="log-actions" id="dTaskActions"></div>
+                            </div>
+                            <div class="card-body">
+                                <div class="progress-panel">
+                                    <div class="pp-row1">
+                                        <div class="pp-label" id="dProgressText">等待任务…</div>
+                                        <div class="pp-percent" id="dProgressPercent">0%</div>
+                                    </div>
+                                    <div class="progress-bar-lg">
+                                        <div class="progress-fill" id="dProgressFill"></div>
+                                    </div>
+                                    <div class="pp-file-row">
+                                        <span class="pp-file-label">当前文件</span>
+                                        <span class="pp-file-pct" id="dFilePct">0%</span>
+                                    </div>
+                                    <div class="progress-bar-sm">
+                                        <div class="progress-fill" id="dFileFill"></div>
+                                    </div>
+                                    <div class="pp-subtask" id="dSubtask">—</div>
+                                    <div class="pp-meta">
+                                        <div class="pp-meta-item speed"><span>瞬时网速</span><b id="dSpeed">0 B/s</b></div>
+                                        <div class="pp-meta-item ok"><span>成功</span><b id="dCntOk">0</b></div>
+                                        <div class="pp-meta-item skip"><span>跳过</span><b id="dCntSkip">0</b></div>
+                                        <div class="pp-meta-item err"><span>失败</span><b id="dCntFail">0</b></div>
+                                        <div class="pp-meta-item warn"><span>缺失</span><b id="dCntMiss">0</b></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 子视图：任务结算页 -->
+                    <div id="dqSettleView" style="display:none">
+                        <div class="page-head page-head-simple">
+                            <button class="btn btn-outline" id="btnBackQueue">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="15 18 9 12 15 6"/>
+                                </svg>
+                                返回任务中心
+                            </button>
+                            <div class="page-title-sm" id="settleTitle">任务结算</div>
+                        </div>
+                        <div class="detail-body" id="settleBody"></div>
+                    </div>
+                </section>
+
+                <!-- ==================== 页面 F：关于 ==================== -->
+                <section class="page" id="pageF">
+                    <div class="page-head">
+                        <div>
+                            <h2 class="page-title">关于 ModList-Weaver</h2>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">◎</span> 软件信息</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="about-hero">
+                                <div class="about-logo">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                                        <line x1="12" y1="22.08" x2="12" y2="12"/>
+                                    </svg>
+                                </div>
+                                <div class="about-hero-main">
+                                    <div class="about-name">ModList-Weaver</div>
+                                    <div class="about-ver">版本 v2.5</div>
+                                    <div class="about-desc">Minecraft 模组迁移工具：扫描旧版本 mods 目录、导出 HMCL 兼容清单、批量 / 单模组下载。</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">✦</span> 作者</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="about-author">
+                                <img class="author-avatar lg" src="/src/images/head.png" alt="LSssT" />
+                                <div>
+                                    <div class="author-name">LSssT</div>
+                                    <a class="about-link" href="https://github.com/JonathanSssst" target="_blank">https://github.com/JonathanSssst</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==================== 页面 G：更新日志 ==================== -->
+                <section class="page" id="pageG">
+                    <div class="page-head">
+                        <div>
+                            <h2 class="page-title">更新日志</h2>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">◈</span> 版本历史</div>
+                            <span class="ch-hint">最近更新在前</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="changelog-section">
+                                <div class="cl-item">
+                                    <div class="cl-ver">v2.5</div>
+                                    <ul class="cl-list">
+                                        <li>修复批量下载勾选模组后「下一步：目标配置」按钮无响应的问题。</li>
+                                        <li>修复任务 / 历史列表删除按钮缺少图标的问题（并补上「继续」按钮图标）。</li>
+                                        <li>结算页信息卡片重新排版：「任务」「保存目录」「清单文件」独占整行，长文本不再挤压错位。</li>
+                                        <li>进入结算页新增淡入上滑过渡动画。</li>
+                                    </ul>
+                                </div>
+                                <div class="cl-item">
+                                    <div class="cl-ver">v2.4</div>
+                                    <ul class="cl-list">
+                                        <li>新增「设置」页：最大并发下载数（默认 3）与全局网速限制，可热更新即时生效。</li>
+                                        <li>支持明暗主题，顶栏一键切换，偏好持久化。</li>
+                                        <li>批量下载改为四步向导：新增清单预览与勾选步骤，可按需选择下载模组。</li>
+                                        <li>任务详情改为双进度条：总任务进度 + 当前文件进度。</li>
+                                        <li>结算页合并失败 / 缺失为统一列表，按类型着色并标注原因，支持「查找类似」。</li>
+                                        <li>模组详情版本列表支持折叠展开更新日志。</li>
+                                        <li>精简各处说明性文字，界面更聚焦。</li>
+                                    </ul>
+                                </div>
+                                <div class="cl-item">
+                                    <div class="cl-ver">v2.2</div>
+                                    <ul class="cl-list">
+                                        <li>「批量下载」改为三步向导，「模组列表」去除步骤编号。</li>
+                                        <li>所有版本输入改为下拉选择（读取 Minecraft 官方版本列表）。</li>
+                                        <li>任务中心拆分为「进行中 / 已完成」：终态任务持久化本机，重启不丢失。</li>
+                                        <li>日志不再内嵌刷新，改为「查看日志 / 导出日志」，日志归档于 cache/logs。</li>
+                                        <li>新增任务结算页：查看失败 / 缺失明细、重试、打开源 / 目标目录。</li>
+                                        <li>新增独立「更新日志」页；「关于」改为独立分类并展示作者头像。</li>
+                                        <li>修复任务中心删除按钮显示异常、面包屑根节点固定不变等问题。</li>
+                                    </ul>
+                                </div>
+                                <div class="cl-item">
+                                    <div class="cl-ver">v2.1</div>
+                                    <ul class="cl-list">
+                                        <li>合并「搜索 &amp; 单模组」与「模组详情」为「模组列表」页，分页展示，支持筛选与搜索。</li>
+                                        <li>模组详情页新增一键下载（含 required 前置依赖）。</li>
+                                        <li>新增「关于」页面，展示本软件更新日志与作者信息。</li>
+                                    </ul>
+                                </div>
+                                <div class="cl-item">
+                                    <div class="cl-ver">v2.0</div>
+                                    <ul class="cl-list">
+                                        <li>新增下载队列：排队执行，支持暂停、继续、停止与删除。</li>
+                                        <li>新增模组详情页（图标、版本、作者、简介）。</li>
+                                        <li>扫描导出改为三步向导，支持勾选自定义导出，未识别模组标灰置顶。</li>
+                                        <li>任务中心重新排版，长文件名友好展示。</li>
+                                    </ul>
+                                </div>
+                                <div class="cl-item">
+                                    <div class="cl-ver">v1.0</div>
+                                    <ul class="cl-list">
+                                        <li>扫描 mods 目录并通过文件哈希反查 Modrinth 项目。</li>
+                                        <li>导出 HMCL 兼容 modlist.json。</li>
+                                        <li>批量 / 单模组下载（自动解析 required 前置依赖）。</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==================== 页面 H：设置 ==================== -->
+                <section class="page" id="pageH">
+                    <div class="page-head">
+                        <div>
+                            <h2 class="page-title">设置</h2>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">⚙</span> 下载</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row form-row-grid">
+                                <div class="form-field">
+                                    <label>最大并发下载数</label>
+                                    <select id="setConcurrency" class="input">
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3" selected>3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                        <option value="6">6</option>
+                                    </select>
+                                </div>
+                                <div class="form-field">
+                                    <label>全局网速限制（MB/s，0 为不限速）</label>
+                                    <input type="number" id="setRateLimit" class="input" min="0" step="0.5" placeholder="0" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">◐</span> 外观</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row form-row-grid">
+                                <div class="form-field">
+                                    <label>主题</label>
+                                    <select id="setTheme" class="input">
+                                        <option value="auto">跟随系统</option>
+                                        <option value="light">浅色</option>
+                                        <option value="dark">深色</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="btn btn-primary" id="btnSaveSettings">保存设置</button>
+                        <span class="field-hint" id="settingsSaved"></span>
+                    </div>
+                </section>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- MC 版本下拉数据（datalist） -->
+    <datalist id="mcVersionsList"></datalist>
+
+    <!-- 日志查看弹窗 -->
+    <div class="modal-mask" id="logModal" style="display:none">
+        <div class="modal">
+            <div class="modal-head">
+                <b class="modal-title" id="lmTitle">任务日志</b>
+                <div class="modal-actions">
+                    <button class="btn btn-outline btn-sm" id="lmExport">导出日志</button>
+                    <button class="btn btn-outline btn-sm" id="lmClose">关闭</button>
+                </div>
+            </div>
+            <div class="modal-body log-view" id="lmBody"></div>
+        </div>
+    </div>
+
+    <!-- 全局提示条 -->
+    <div class="toast" id="toast"></div>
+
+    <script src="/static/main.js"></script>
+</body>
+</html>
