@@ -54,12 +54,20 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.2.0"
+CURRENT_VERSION = "3.2.1"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.2.1",
+        "date": "2026-08",
+        "title": "更新应用图标样式",
+        "items": [
+            "【应用图标】重绘应用图标（app.png / app.ico），可执行文件、窗口与桌面图标同步更新。",
+        ],
+    },
     {
         "version": "3.2.0",
         "date": "2026-08",

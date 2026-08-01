@@ -2,7 +2,7 @@
 
 > Minecraft 双源（Modrinth / CurseForge）模组迁移桌面工具 —— 一键扫描本地 mods，导出模组清单，跨版本/跨加载器批量重下载，自带断点续传、哈希校验、依赖递归与任务队列。
 
-当前版本：**v3.2.0** · 平台：Windows x64（PyInstaller 打包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
+当前版本：**v3.2.1** · 平台：Windows x64（PyInstaller 打包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
 
 ---
 
@@ -329,6 +329,10 @@ project.source 字段优先级最高
 ## 版本历史
 
 完整 Changelog 在软件内「更新日志」页动态渲染（数据源：`backend/api.py:CHANGELOG`）。
+
+### v3.2.1（2026-08）· 更新应用图标样式
+
+- 重绘应用图标（`assets/app.ico` / `app.png`），可执行文件、窗口与桌面图标同步更新
 
 ### v3.2.0（2026-08）· 打开源页面 + 存储清理 + 应用图标 + 下载完成通知 + 移除作者头像
 

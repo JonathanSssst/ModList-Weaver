@@ -128,11 +128,11 @@ def main():
         height=840,
         min_size=(980, 680),
         text_select=True,
-        icon=_icon,
     )
     # 页面加载完成后挂载拖拽监听（获取拖入文件的完整绝对路径）
     window.events.loaded += lambda: _setup_drag_drop(window)
-    webview.start()
+    # icon 仅由 webview.start() 支持（winforms 后端据此设置窗口图标）
+    webview.start(icon=_icon)
 
 
 if __name__ == "__main__":

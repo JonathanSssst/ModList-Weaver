@@ -60,7 +60,8 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # 应用不使用 Qt，排除多个 Qt 绑定避免 PyInstaller hook 冲突
+    excludes=['PyQt5', 'PyQt6', 'PySide2', 'PySide6'],
     cipher=block_cipher,
 )
 
