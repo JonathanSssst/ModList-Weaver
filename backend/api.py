@@ -35,6 +35,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .modrinth_client import ModrinthClient, ModrinthError
+from .curseforge_client import CurseForgeClient, CurseForgeError
 from .scanner import scan_mods
 from .downloader import (
     TaskManager, run_batch_download, run_single_download,
@@ -71,8 +72,9 @@ if _FRONTEND_DIR.is_dir():
 # 初始化全局设置（并发数 / 网速限制）与任务管理器 / 客户端
 init_settings(_FRONTEND_DIR.parent if _FRONTEND_DIR.is_dir() else Path.cwd())
 
-# 全局 Modrinth 客户端（httpx 连接池复用）
+# 全局下载源客户端（httpx 连接池复用）
 client = ModrinthClient()
+cf_client = CurseForgeClient()
 # 全局任务管理器
 task_manager = TaskManager()
 
@@ -131,6 +133,7 @@ class DownloadListRequest(BaseModel):
     loader: str
     save_dir: str
     project_ids: Optional[list] = None  # 仅下载指定的 project_id 列表
+    source: Optional[str] = None         # 强制下载源：modrinth / curseforge / auto(默认)
 
 
 class SearchRequest(BaseModel):
@@ -140,6 +143,7 @@ class SearchRequest(BaseModel):
     project_type: Optional[str] = None
     limit: int = 10
     offset: int = 0
+    source: Optional[str] = None         # modrinth(默认) / curseforge
 
 
 class DownloadSingleRequest(BaseModel):
@@ -147,6 +151,7 @@ class DownloadSingleRequest(BaseModel):
     mc_version: str
     loader: str
     save_dir: str
+    source: Optional[str] = None         # 强制下载源
 
 
 class TaskControlRequest(BaseModel):
@@ -162,6 +167,8 @@ class SettingsUpdateRequest(BaseModel):
     max_concurrency: Optional[int] = None
     rate_limit_mbps: Optional[float] = None
     theme: Optional[str] = None
+    source: Optional[str] = None          # V3.0：下载源偏好
+    curseforge_api_key: Optional[str] = None  # V3.0：CurseForge 官方 API Key（可选）
 
 
 class PreviewRequest(BaseModel):
@@ -242,15 +249,19 @@ def api_pick_save(title: str = "保存文件", filename: str = "modlist.json", e
 
 @app.post("/api/scan_mods")
 async def api_scan_mods(req: ScanRequest):
-    """扫描 mods 目录，解析 jar 元数据并通过哈希反查 project_id"""
+    """扫描 mods 目录，解析 jar 元数据并通过多平台哈希反查 project_id
+
+    顺序：先 Modrinth (sha512) 反查，未命中再 CurseForge (murmur2) 反查；
+    每个命中结果含 source 字段（modrinth / curseforge）。
+    """
     if not req.folder or not Path(req.folder).is_dir():
         raise HTTPException(status_code=400, detail=f"目录不存在: {req.folder}")
     try:
-        results = await scan_mods(req.folder, client)
+        results = await scan_mods(req.folder, client, cf_client)
     except FileNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except ModrinthError as e:
-        raise HTTPException(status_code=502, detail=f"Modrinth API 错误: {e}")
+    except (ModrinthError, CurseForgeError) as e:
+        raise HTTPException(status_code=502, detail=f"下载源 API 错误: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"扫描失败: {e}")
 
@@ -265,10 +276,10 @@ async def api_scan_mods(req: ScanRequest):
 
 @app.post("/api/export_json")
 async def api_export_json(req: ExportRequest):
-    """生成 HMCL 兼容 modlist 并保存本地
+    """生成 HMCL 兼容 modlist 并保存本地（含多源 source 字段，V3.0）
 
-    结构与 HMCL 导出清单保持一致，核心字段 projects:[{project_id, ...}]
-    仅导出成功在 Modrinth 识别到 project_id 的模组。
+    结构与 HMCL 导出清单保持一致，核心字段 projects:[{project_id, source, ...}]
+    仅导出成功识别到 project_id 的模组。
     """
     projects = []
     for m in req.mods or []:
@@ -282,11 +293,12 @@ async def api_export_json(req: ExportRequest):
             "version_number": m.get("version_number"),
             "filename": m.get("filename"),
             "source_loader": meta.get("loader"),
+            "source": m.get("source") or "modrinth",  # V3.0：来源标识 modrinth / curseforge
         })
 
     manifest = {
         "name": "ModList-Weaver Export",
-        "version": "1.0",
+        "version": "3.0",
         "game_version": req.game_version or "",
         "loader": req.loader or "",
         "projects": projects,
@@ -308,17 +320,23 @@ async def api_export_json(req: ExportRequest):
 
 @app.post("/api/download_from_list")
 async def api_download_from_list(req: DownloadListRequest):
-    """读取 modlist 启动批量下载（进入下载队列，立即返回 task_id）"""
+    """读取 modlist 启动批量下载（入队，立即返回 task_id）
+
+    V3.0：支持 req.source 全局强制下载源（modrinth / curseforge / auto），
+    清单中 project 级别的 source 字段优先。
+    """
     if not Path(req.json_path).is_file():
         raise HTTPException(status_code=400, detail=f"清单文件不存在: {req.json_path}")
     if not req.mc_version or not req.loader:
         raise HTTPException(status_code=400, detail="必须指定目标游戏版本与加载器")
 
-    tid, state = await task_manager.create(
-        "batch",
-        lambda gate: run_batch_download(
+    async def _factory(gate):
+        return await run_batch_download(
             client, req.json_path, req.mc_version, req.loader, req.save_dir, state, gate,
-            project_ids=req.project_ids))
+            project_ids=req.project_ids, cf_client=cf_client,
+            global_source=req.source)
+
+    tid, state = await task_manager.create("batch", _factory)
     return {"task_id": tid, "queued": state.status != "running"}
 
 
@@ -349,86 +367,144 @@ async def api_preview_list(req: PreviewRequest):
 
 @app.post("/api/search_mod")
 async def api_search_mod(req: SearchRequest):
-    """关键词搜索 Modrinth 模组（支持分页与筛选）
+    """关键词搜索模组（支持分页与筛选 + 双源）
 
+    req.source: "curseforge" 时走 CurseForge，否则（默认）走 Modrinth。
     query 可为空串：配合 loader / project_type 筛选时用于分页浏览模组目录。
     """
+    source = (req.source or "modrinth").lower()
     try:
-        data = await client.search_mods(
-            req.query or "", req.game_version, req.loader, req.limit, req.offset, req.project_type)
-    except ModrinthError as e:
+        if source == "curseforge":
+            data = await cf_client.search_mods(
+                req.query or "", req.game_version, req.loader, req.limit, req.offset, req.project_type)
+        else:
+            data = await client.search_mods(
+                req.query or "", req.game_version, req.loader, req.limit, req.offset, req.project_type)
+    except (ModrinthError, CurseForgeError) as e:
         raise HTTPException(status_code=502, detail=str(e))
     return data
 
 
 @app.post("/api/download_single_mod")
 async def api_download_single_mod(req: DownloadSingleRequest):
-    """单模组 + 前置依赖下载（进入下载队列，立即返回 task_id）"""
+    """单模组 + 前置依赖下载（进入下载队列，立即返回 task_id）
+
+    V3.0：req.source 强制指定下载源；auto 时按 settings.source 或 project_id 特征选择。
+    """
     if not req.project_id:
         raise HTTPException(status_code=400, detail="project_id 不能为空")
     if not req.mc_version or not req.loader:
         raise HTTPException(status_code=400, detail="必须指定目标游戏版本与加载器")
 
-    tid, state = await task_manager.create(
-        "single",
-        lambda gate: run_single_download(
-            client, req.project_id, req.mc_version, req.loader, req.save_dir, state, gate))
+    async def _factory(gate):
+        return await run_single_download(
+            client, req.project_id, req.mc_version, req.loader, req.save_dir, state, gate,
+            cf_client=cf_client, force_source=req.source)
+
+    tid, state = await task_manager.create("single", _factory)
     return {"task_id": tid, "queued": state.status != "running"}
 
 
 @app.get("/api/project/{project_id}")
-async def api_project_detail(project_id: str):
+async def api_project_detail(project_id: str, source: Optional[str] = None):
     """模组详情：项目信息 + 作者 + 版本列表（含更新日志）
 
-    用于前端"模组详情"页面展示图标、版本、作者、简介与更新日志。
+    source 参数可显式指定 modrinth / curseforge；未指定时：
+    - project_id 是纯数字 -> 优先 CurseForge，失败回退 Modrinth
+    - 否则优先 Modrinth，失败回退 CurseForge
     """
-    try:
-        project = await client.get_project(project_id)
-    except ModrinthError as e:
-        raise HTTPException(status_code=502, detail=f"Modrinth API 错误: {e}")
-    if not project:
-        raise HTTPException(status_code=404, detail=f"项目不存在: {project_id}")
-
-    # 作者（团队成员）
+    project = None
     authors = []
-    team_id = project.get("team")
-    if team_id:
+    raw_versions = []
+    errors = []
+
+    candidates = []
+    if source == "curseforge":
+        candidates = [("curseforge", cf_client, int(project_id) if str(project_id).isdigit() else project_id)]
+    elif source == "modrinth":
+        candidates = [("modrinth", client, project_id)]
+    elif str(project_id).isdigit():
+        candidates = [
+            ("curseforge", cf_client, int(project_id)),
+            ("modrinth", client, project_id),
+        ]
+    else:
+        candidates = [
+            ("modrinth", client, project_id),
+            ("curseforge", cf_client, project_id),
+        ]
+
+    for src_name, cl, pid in candidates:
         try:
-            members = await client.get_team(team_id) or []
-        except ModrinthError:
-            members = []
-        for m in members:
-            user = m.get("user") or {}
-            authors.append({
-                "name": user.get("username") or m.get("name"),
-                "avatar_url": user.get("avatar_url"),
-                "role": m.get("role"),
+            project = await cl.get_project(pid)
+        except (ModrinthError, CurseForgeError) as e:
+            errors.append(f"[{src_name}] {e}")
+            continue
+        if project:
+            try:
+                if src_name == "modrinth":
+                    team_id = project.get("team")
+                    if team_id:
+                        try:
+                            members = await client.get_team(team_id) or []
+                        except (ModrinthError, CurseForgeError):
+                            members = []
+                        for m in members:
+                            user = m.get("user") or {}
+                            authors.append({
+                                "name": user.get("username") or m.get("name"),
+                                "avatar_url": user.get("avatar_url"),
+                                "role": m.get("role"),
+                            })
+                    raw_versions = await client.get_versions_by_project(pid) or []
+                else:
+                    authors = project.get("authors") or []
+                    raw_versions = await cf_client.get_versions_by_project(pid) or []
+                project["source"] = src_name
+                break
+            except (ModrinthError, CurseForgeError) as e:
+                errors.append(f"[{src_name}] versions/authors fetch: {e}")
+                project = None
+                authors = []
+                raw_versions = []
+                continue
+
+    if not project:
+        raise HTTPException(status_code=404, detail=f"项目不存在: {project_id}（{'; '.join(errors) if errors else ''}）")
+
+    versions = []
+    for v in raw_versions[:30]:
+        if project.get("source") == "modrinth":
+            files = v.get("files") or []
+            primary = next((f for f in files if f.get("primary")), files[0] if files else None)
+            versions.append({
+                "id": v.get("id"),
+                "name": v.get("name"),
+                "version_number": v.get("version_number"),
+                "game_versions": v.get("game_versions", []),
+                "loaders": v.get("loaders", []),
+                "date_published": v.get("date_published"),
+                "changelog": v.get("changelog", ""),
+                "filename": primary.get("filename") if primary else None,
+                "filesize": primary.get("size") if primary else None,
+                "download_url": primary.get("url") if primary else None,
+            })
+        else:
+            versions.append({
+                "id": v.get("id") or v.get("version_id"),
+                "name": v.get("name") or v.get("version_number"),
+                "version_number": v.get("version_number"),
+                "game_versions": v.get("game_versions", []),
+                "loaders": v.get("loaders", []),
+                "date_published": v.get("date_published"),
+                "changelog": v.get("changelog", ""),
+                "filename": v.get("filename"),
+                "filesize": v.get("filesize"),
+                "download_url": v.get("download_url"),
             })
 
-    # 版本列表（API 默认按发布时间降序），取最近 30 条
-    versions = []
-    try:
-        raw_versions = await client.get_versions_by_project(project_id) or []
-    except ModrinthError:
-        raw_versions = []
-    for v in raw_versions[:30]:
-        files = v.get("files") or []
-        primary = next((f for f in files if f.get("primary")), files[0] if files else None)
-        versions.append({
-            "id": v.get("id"),
-            "name": v.get("name"),
-            "version_number": v.get("version_number"),
-            "game_versions": v.get("game_versions", []),
-            "loaders": v.get("loaders", []),
-            "date_published": v.get("date_published"),
-            "changelog": v.get("changelog", ""),
-            "filename": primary.get("filename") if primary else None,
-            "filesize": primary.get("size") if primary else None,
-            "download_url": primary.get("url") if primary else None,
-        })
-
     return {
-        "project_id": project.get("id") or project_id,
+        "project_id": project.get("id") or project.get("project_id") or project_id,
         "slug": project.get("slug"),
         "title": project.get("title"),
         "description": project.get("description"),
@@ -440,8 +516,9 @@ async def api_project_detail(project_id: str):
         "game_versions": project.get("game_versions", []),
         "downloads": project.get("downloads"),
         "followers": project.get("followers"),
-        "license": (project.get("license") or {}).get("id"),
+        "license": project.get("license") or ((project.get("license") or {}).get("id") if isinstance(project.get("license"), dict) else None),
         "source_url": project.get("source_url"),
+        "source": project.get("source"),
         "authors": authors,
         "versions": versions,
     }

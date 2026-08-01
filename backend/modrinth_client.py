@@ -181,29 +181,126 @@ class ModrinthClient:
 
     # ==================== 文件下载 ====================
 
+    async def _probe_range_support(self, url):
+        """轻量探测目标 URL 是否支持 Range 请求（返回 206 + Accept-Ranges: bytes）
+
+        不支持时返回 0，表示应整文件从头下载；支持时返回服务端报告的总字节数。
+        """
+        try:
+            resp = await self._client.request(
+                "GET", url, headers={"Range": "bytes=0-0"}, timeout=10.0)
+        except (httpx.HTTPError, OSError):
+            return 0
+        if resp.status_code == 206:
+            # 206 Partial Content：服务端支持 Range
+            content_range = resp.headers.get("Content-Range", "")
+            # Content-Range: bytes 0-0/12345
+            if content_range and "/" in content_range:
+                total = content_range.split("/", 1)[-1].strip()
+                if total.isdigit():
+                    return int(total)
+            accept = resp.headers.get("Accept-Ranges", "")
+            if "bytes" in accept.lower():
+                total = resp.headers.get("Content-Length", "")
+                if total.isdigit():
+                    return int(total)
+        # 200 或无 Range 支持
+        return 0
+
     async def download_file(self, url, dest_path, expected_sha512=None, progress_cb=None):
-        """流式下载文件，边下载边计算 sha512，结束后校验
+        """流式下载文件，支持断点续传（Range），完成后 sha512 校验
+
+        策略：
+          1. 使用 .part 临时文件作为下载载体，避免半成品冒充成品
+          2. 下载前探测 Range 支持；若支持且 .part 已存在，从断点续传
+          3. 不支持 Range 或首次下载时，从头开始
+          4. 全部字节下载完成后，原子 rename 为最终 dest_path
 
         :param url: 文件下载直链（来自 version.files[].url）
-        :param dest_path: 本地保存路径
+        :param dest_path: 本地保存最终路径
         :param expected_sha512: 期望的 sha512（来自 version.files[].hashes.sha512）
         :param progress_cb: 异步进度回调 async cb(done_bytes, total_bytes)
         :return: 已下载字节数
-        :raises ModrinthError: 哈希校验失败
+        :raises ModrinthError: 哈希校验失败或下载失败
         """
         dest_path = Path(dest_path)
         dest_path.parent.mkdir(parents=True, exist_ok=True)
+        part_path = dest_path.with_suffix(dest_path.suffix + ".part")
         sha = hashlib.sha512()
-        downloaded = 0
 
-        # 文件走 CDN，不经过 API 节流，但保留同样的 User-Agent
+        # 1. 确定已有的 .part 大小（断点字节数）与 Range 支持情况
+        existing_bytes = 0
+        if part_path.is_file():
+            existing_bytes = part_path.stat().st_size
+        total_server = await self._probe_range_support(url) if existing_bytes > 0 else 0
+        resume = existing_bytes > 0 and total_server > 0 and existing_bytes < total_server
+
+        # 如断点字节数 >= 服务端报告的总大小，可能 .part 已经完整（只是上次 crash 没改名）
+        if existing_bytes > 0 and total_server > 0 and existing_bytes >= total_server:
+            resume = False
+            existing_bytes = 0
+            try:
+                part_path.unlink()
+            except OSError:
+                pass
+
+        # 断点续传：先把 .part 已有内容喂入 sha 计算，保证最终校验一致
+        if resume:
+            try:
+                with open(part_path, "rb") as f:
+                    while True:
+                        block = f.read(1024 * 1024)
+                        if not block:
+                            break
+                        sha.update(block)
+            except OSError as e:
+                resume = False
+                existing_bytes = 0
+                part_path.unlink(missing_ok=True)
+                sha = hashlib.sha512()
+
+        downloaded = existing_bytes
+        total_size = total_server if resume else 0
+
+        # 2. 构造请求：续传时带 Range: bytes={existing}-
+        headers = {}
+        if resume:
+            headers["Range"] = f"bytes={existing_bytes}-"
+
         try:
-            async with self._client.stream("GET", url) as resp:
+            async with self._client.stream("GET", url, headers=headers) as resp:
                 if resp.status_code >= 400:
+                    # 如续传请求 416 Range Not Satisfiable 等：降级为整文件下载
+                    if resume and resp.status_code in (416, 413, 417):
+                        part_path.unlink(missing_ok=True)
+                        # 重新递归一次（降级路径）
+                        return await self.download_file(url, dest_path, expected_sha512, progress_cb)
                     raise ModrinthError(f"下载失败 HTTP {resp.status_code}: {url}")
-                total_size = int(resp.headers.get("content-length", 0))
+
+                if not total_size:
+                    total_size = int(resp.headers.get("content-length", 0))
+                    if resume:
+                        # 续传 206 的 content-length 是剩余字节，总字节要加断点
+                        cr = resp.headers.get("Content-Range", "")
+                        if cr and "/" in cr:
+                            t = cr.split("/", 1)[-1].strip()
+                            if t.isdigit():
+                                total_size = int(t)
+                            else:
+                                total_size = total_size + existing_bytes
+                        else:
+                            total_size = total_size + existing_bytes
+
+                write_mode = "ab" if resume and resp.status_code == 206 else "wb"
+                if write_mode == "wb" and part_path.is_file():
+                    try:
+                        part_path.unlink()
+                    except OSError:
+                        pass
+                downloaded = 0 if write_mode == "wb" else existing_bytes
+
                 try:
-                    with open(dest_path, "wb") as f:
+                    with open(part_path, write_mode) as f:
                         async for chunk in resp.aiter_bytes(chunk_size=65536):
                             f.write(chunk)
                             sha.update(chunk)
@@ -212,21 +309,28 @@ class ModrinthClient:
                             if progress_cb:
                                 await progress_cb(downloaded, total_size)
                 except asyncio.CancelledError:
-                    # 任务被用户停止：清理未完成的临时文件后重新抛出
-                    dest_path.unlink(missing_ok=True)
+                    # 任务被用户停止：保留 .part 以便下次续传
                     raise
         except (httpx.HTTPError, OSError) as e:
-            # 流式传输中断（断连 / 服务端重置 / 写入失败）：清理损坏的临时文件，
-            # 归一化为 ModrinthError，供上层下载重试逻辑捕获
-            dest_path.unlink(missing_ok=True)
+            # 流式传输中断：保留 .part，归一化为 ModrinthError 供上层重试
             raise ModrinthError(f"下载中断: {url} ({e})") from e
 
-        # 哈希校验，失败则删除损坏文件并抛异常（由上层重试）
+        # 3. 哈希校验
         if expected_sha512:
             actual = sha.hexdigest()
             if actual.lower() != expected_sha512.lower():
-                dest_path.unlink(missing_ok=True)
+                part_path.unlink(missing_ok=True)
                 raise ModrinthError(
                     f"哈希校验失败: 期望 {expected_sha512[:16]}... 实际 {actual[:16]}..."
                 )
+
+        # 4. 原子改名：.part -> 最终文件（若目标已存在，在 Windows 下必须先删）
+        try:
+            if dest_path.is_file():
+                dest_path.unlink()
+            part_path.rename(dest_path)
+        except OSError as e:
+            part_path.unlink(missing_ok=True)
+            raise ModrinthError(f"重命名下载结果失败: {e}") from e
+
         return downloaded

@@ -28,6 +28,13 @@ wheels/
 
 # PyInstaller
 *.spec.bak
+build/
+dist/
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Virtual environments
 .env

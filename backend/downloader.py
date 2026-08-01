@@ -10,12 +10,14 @@
 - 不存在适配新版本的模组标记缺失，导出缺失清单文本
 """
 import asyncio
+import hashlib
 import json
 import time
 from datetime import datetime
 from pathlib import Path
 
 from .modrinth_client import ModrinthClient, ModrinthError
+from .curseforge_client import CurseForgeClient, CurseForgeError
 from .scanner import compute_sha512
 from .settings import Settings, get_settings
 
@@ -486,144 +488,252 @@ def _classify_error(e):
             "下载中断", "请求", "网络", "超时", "timeout",
             "connect", "connection", "read error", "eof")):
         return "网络错误"
-    if "哈希" in s or "sha" in low:
+    if "哈希" in s or "sha" in low or "校验失败" in s or "校验" in s:
         return "文件校验失败"
     return "未知错误"
 
 
-async def _resolve_and_download(client, project_id, mc_version, loader, save_dir,
-                                processed, task_state, gate, depth=0):
-    """递归解析并下载模组及其 required 依赖
+class MultiSourceError(Exception):
+    """聚合多源错误：当 auto 模式下两个源都失败时抛出，含各源的信息"""
 
-    :param processed: 已处理 project_id 集合（去重 + 防循环依赖）
-    :param gate: 任务门控（暂停/停止检查点）
-    :param depth: 递归深度（仅用于日志缩进）
+
+def _pick_primary_from_version(version):
+    """从 version 字典中提取主文件信息（兼容 Modrinth 和 CurseForge 归一化结构）
+
+    返回 dict: {filename, download_url, sha512(或None), sha1(或None), murmur2(或None)}
+    """
+    # Modrinth 版本的 files
+    files = version.get("files") or []
+    if files:
+        primary = next((f for f in files if f.get("primary")), files[0])
+        hashes = primary.get("hashes") or {}
+        return {
+            "filename": primary.get("filename"),
+            "download_url": primary.get("url"),
+            "sha512": hashes.get("sha512"),
+            "sha1": hashes.get("sha1"),
+            "murmur2": hashes.get("murmur2"),
+        }
+    # CurseForge 归一化版本（顶层直接有 filename/download_url/hashes）
+    hashes = version.get("hashes") or {}
+    return {
+        "filename": version.get("filename"),
+        "download_url": version.get("download_url"),
+        "sha512": hashes.get("sha512"),
+        "sha1": hashes.get("sha1"),
+        "murmur2": hashes.get("murmur2"),
+    }
+
+
+def _best_hash_for_existing_check(pf):
+    """选最可靠的哈希来做已存在文件校验（优先 sha512，其次 sha1，否则 murmur2）"""
+    if pf.get("sha512"):
+        return "sha512", pf["sha512"]
+    if pf.get("sha1"):
+        return "sha1", pf["sha1"]
+    if pf.get("murmur2"):
+        return "murmur2", pf["murmur2"]
+    return None, None
+
+
+def _compute_local_hash(dest_path, algo):
+    """本地计算指定算法哈希（sha512 / sha1 / murmur2）"""
+    try:
+        if algo == "sha512":
+            return compute_sha512(dest_path)
+        if algo == "sha1":
+            h = hashlib.sha1()
+            with open(dest_path, "rb") as f:
+                for chunk in iter(lambda: f.read(65536), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+        if algo == "murmur2":
+            from .curseforge_client import compute_cf_murmur2
+            return compute_cf_murmur2(dest_path)
+    except OSError:
+        return None
+    return None
+
+
+async def _resolve_and_download(mr_client, cf_client, project_id, mc_version, loader, save_dir,
+                                processed, task_state, gate, depth=0, force_source=None):
+    """递归解析并下载模组及其 required 依赖（多源版本）
+
+    :param mr_client: ModrinthClient
+    :param cf_client: CurseForgeClient
+    :param force_source: None=按 settings.source 决定；modrinth=强制 Modrinth；
+                         curseforge=强制 CurseForge；auto=依次尝试两个源
     """
     await gate.check()
-
-    # 去重：已处理过的项目直接跳过，防止循环依赖死循环
     if project_id in processed:
         return
     processed.add(project_id)
 
+    src_preference = (force_source or get_settings().get().get("source") or "auto").lower()
+
     indent = "  " * depth
+    sources = []  # [(source_name, client, project_id_for_client)]
+    # 先判断 project_id 是数字还是 slufigy 字符串：CF 项目 ID 总是纯数字
+    if project_id and str(project_id).isdigit():
+        if src_preference == "modrinth":
+            # 数字 ID 也可能对应 Modrinth（但概率低）；仍按顺序尝试
+            sources = [("modrinth", mr_client, project_id)]
+        elif src_preference == "curseforge":
+            sources = [("curseforge", cf_client, int(project_id))]
+        else:  # auto
+            # CF 数字 ID 先试 CurseForge，再用 modrinth 兜底
+            sources = [
+                ("curseforge", cf_client, int(project_id)),
+                ("modrinth", mr_client, project_id),
+            ]
+    else:
+        if src_preference == "curseforge":
+            sources = [("curseforge", cf_client, project_id)]
+        elif src_preference == "modrinth":
+            sources = [("modrinth", mr_client, project_id)]
+        else:  # auto
+            sources = [
+                ("modrinth", mr_client, project_id),
+                ("curseforge", cf_client, project_id),
+            ]
 
-    # 获取项目信息（用于友好显示名称）
-    try:
-        project = await client.get_project(project_id)
-    except ModrinthError as e:
-        reason = _classify_error(e)
-        task_state.add_log(f"{indent}[失败] 获取项目 {project_id} 失败: {e}", "error")
-        task_state.add_fail(project_id, project_id, f"{reason}（获取项目失败）")
-        return
+    project_name = project_id
+    last_reasons = []
+    resolved_any = False
 
-    project_name = (project or {}).get("title", project_id)
-    task_state.add_log(f"{indent}[处理] {project_name} ({project_id})")
-
-    # 查询适配目标游戏版本的版本列表（不按加载器过滤，以便精确判断失败原因）
-    try:
-        versions = await client.get_versions_by_project(project_id, [mc_version], None)
-    except ModrinthError as e:
-        reason = _classify_error(e)
-        task_state.add_log(f"{indent}[失败] 查询版本失败 {project_name}: {e}", "error")
-        task_state.add_fail(project_id, project_name, f"{reason}（查询版本失败）")
-        return
-
-    version, miss_reason = _pick_best_version(versions, mc_version, loader)
-    if not version:
-        # 不存在适配新版本的模组，标记缺失并给出原因
-        task_state.add_log(
-            f"{indent}[缺失] {miss_reason}: {project_name}", "warn")
-        task_state.add_missing(project_id, project_name, mc_version, loader, miss_reason)
-        return
-
-    # 选择主文件（primary 优先，否则取首个）
-    files = version.get("files") or []
-    primary = next((f for f in files if f.get("primary")), files[0] if files else None)
-    if not primary:
-        task_state.add_log(f"{indent}[缺失] 无可下载文件: {project_name}", "warn")
-        task_state.add_missing(project_id, project_name, mc_version, loader)
-        return
-
-    url = primary["url"]
-    filename = primary["filename"]
-    expected_sha = (primary.get("hashes") or {}).get("sha512")
-    dest = Path(save_dir) / filename
-    task_state.set_current(filename)
-
-    # ===== 已存在文件哈希校验，避免重复下载 =====
-    if dest.is_file() and expected_sha:
-        task_state.add_log(f"{indent}[校验] 已存在 {filename}，计算本地哈希...", "info")
+    for src_idx, (src_name, cl, pid) in enumerate(sources):
         try:
-            local_sha = compute_sha512(dest)
-        except OSError as e:
-            local_sha = ""
-            task_state.add_log(f"{indent}[警告] 本地文件读取失败: {e}", "warn")
+            project = await cl.get_project(pid)
+        except (ModrinthError, CurseForgeError) as e:
+            last_reasons.append(f"[{src_name}] 获取项目失败: {e}")
+            continue
+        if not project:
+            last_reasons.append(f"[{src_name}] 项目不存在 ({pid})")
+            continue
+        project_name = project.get("title") or project.get("slug") or project_id
+        task_state.add_log(f"{indent}[处理] {project_name} ({src_name} · {pid})")
 
-        if local_sha and local_sha.lower() == expected_sha.lower():
-            task_state.add_log(
-                f"{indent}[跳过] {filename} 已存在且校验通过，无需重新下载", "success")
-            task_state.add_skip(project_id, project_name, filename)
-            await _download_dependencies(client, version, mc_version, loader,
-                                         save_dir, processed, task_state, gate, depth)
+        # 获取版本列表（按 mc_version 过滤，loader 过滤留给 pick_best_version）
+        try:
+            versions = await cl.get_versions_by_project(pid, [mc_version], None)
+        except (ModrinthError, CurseForgeError) as e:
+            last_reasons.append(f"[{src_name}] 查询版本失败 {project_name}: {e}")
+            continue
+
+        version, miss_reason = _pick_best_version(versions, mc_version, loader)
+        if not version:
+            # 标记缺失（仅最后一个源）；否则继续下一个源
+            if src_idx < len(sources) - 1:
+                last_reasons.append(f"[{src_name}] {miss_reason}")
+                continue
+            task_state.add_log(f"{indent}[缺失] {miss_reason}: {project_name} ({src_name})", "warn")
+            task_state.add_missing(project_id, project_name, mc_version, loader, miss_reason)
             return
-        else:
-            # 哈希不一致（旧版本 / 损坏文件），删除后重新下载覆盖
-            task_state.add_log(
-                f"{indent}[覆盖] {filename} 哈希不匹配，删除旧文件重新下载", "warn")
+
+        # 提取主文件
+        pf = _pick_primary_from_version(version)
+        if not pf or not pf.get("filename") or not pf.get("download_url"):
+            if src_idx < len(sources) - 1:
+                last_reasons.append(f"[{src_name}] 无可下载主文件")
+                continue
+            task_state.add_log(f"{indent}[缺失] 无可下载文件: {project_name} ({src_name})", "warn")
+            task_state.add_missing(project_id, project_name, mc_version, loader)
+            return
+
+        filename = pf["filename"]
+        url = pf["download_url"]
+        dest = Path(save_dir) / filename
+        task_state.set_current(filename)
+
+        # 已存在文件哈希校验
+        algo, expected = _best_hash_for_existing_check(pf)
+        if dest.is_file() and algo and expected:
+            task_state.add_log(f"{indent}[校验] 已存在 {filename}，计算本地 {algo}...", "info")
+            local = _compute_local_hash(dest, algo)
+            if local and str(local).lower() == str(expected).lower():
+                task_state.add_log(f"{indent}[跳过] {filename} 已存在且校验通过，无需重新下载", "success")
+                task_state.add_skip(project_id, project_name, filename)
+                await _download_dependencies(mr_client, cf_client, version, src_name, mc_version, loader,
+                                             save_dir, processed, task_state, gate, depth, force_source=src_name)
+                resolved_any = True
+                break
+            else:
+                task_state.add_log(
+                    f"{indent}[覆盖] {filename} {algo} 不一致，删除旧文件重新下载", "warn")
+                try:
+                    dest.unlink()
+                except OSError as e:
+                    task_state.add_log(f"{indent}[警告] 删除旧文件失败: {e}", "warn")
+
+        task_state.add_log(f"{indent}[下载] {filename} ({src_name})", "info")
+
+        # 下载并校验，失败自动重试；单源失败不立刻下一个源，只有反复重试都失败才继续
+        success = False
+        last_err = ""
+        for attempt in range(1, DOWNLOAD_RETRIES + 1):
             try:
-                dest.unlink()
-            except OSError as e:
-                task_state.add_log(f"{indent}[警告] 删除旧文件失败: {e}", "warn")
+                async def _prog(done, total):
+                    task_state.update_progress(done, total)
+                kwargs = {"expected_sha512": pf.get("sha512"),
+                          "expected_sha1": pf.get("sha1"),
+                          "expected_murmur2": pf.get("murmur2"),
+                          "progress_cb": _prog}
+                if src_name == "modrinth":
+                    # Modrinth 签名只含 expected_sha512 + progress_cb
+                    await cl.download_file(url, dest, pf.get("sha512"), _prog)
+                else:
+                    # CurseForge 签名：sha1, sha512, murmur2, progress_cb
+                    await cl.download_file(url, dest, **kwargs)
+                task_state.add_log(f"{indent}[成功] {filename}", "success")
+                task_state.add_success(project_id, project_name, filename)
+                success = True
+                break
+            except (ModrinthError, CurseForgeError, OSError) as e:
+                last_err = str(e)
+                task_state.add_log(
+                    f"{indent}[重试 {attempt}/{DOWNLOAD_RETRIES}] {filename} ({src_name}): {last_err}", "warn")
+                await asyncio.sleep(1.0 * attempt)
 
-    task_state.add_log(f"{indent}[下载] {filename}", "info")
+        if not success:
+            reason = _classify_error(last_err)
+            if src_idx < len(sources) - 1:
+                last_reasons.append(f"[{src_name}] 下载失败: {last_err}")
+                continue
+            task_state.add_log(f"{indent}[失败] {filename}: {last_err}", "error")
+            task_state.add_fail(project_id, project_name, reason)
+            return
 
-    # 下载并校验，失败自动重试
-    success = False
-    last_err = ""
-    for attempt in range(1, DOWNLOAD_RETRIES + 1):
-        try:
-            async def _prog(done, total):
-                task_state.update_progress(done, total)
-            await client.download_file(url, dest, expected_sha, _prog)
-            task_state.add_log(f"{indent}[成功] {filename}", "success")
-            task_state.add_success(project_id, project_name, filename)
-            success = True
-            break
-        except (ModrinthError, OSError) as e:
-            last_err = str(e)
-            task_state.add_log(
-                f"{indent}[重试 {attempt}/{DOWNLOAD_RETRIES}] {filename}: {last_err}", "warn")
-            await asyncio.sleep(1.0 * attempt)
+        # 递归下载依赖（以当前源为主，避免不同源依赖交叉造成混乱）
+        await _download_dependencies(mr_client, cf_client, version, src_name, mc_version, loader,
+                                     save_dir, processed, task_state, gate, depth,
+                                     force_source=src_name)
+        resolved_any = True
+        break
 
-    if not success:
-        reason = _classify_error(last_err)
-        task_state.add_log(f"{indent}[失败] {filename}: {last_err}", "error")
-        task_state.add_fail(project_id, project_name, reason)
-
-    # 递归处理 required 强制前置依赖（optional 可选依赖忽略）
-    await _download_dependencies(client, version, mc_version, loader,
-                                 save_dir, processed, task_state, gate, depth)
+    if not resolved_any:
+        # 所有源都失败或无匹配
+        joined = "; ".join(last_reasons) if last_reasons else "未知原因"
+        task_state.add_log(f"{indent}[失败] 所有源解析或下载失败: {project_id} — {joined}", "error")
+        task_state.add_fail(project_id, project_name, f"多源失败: {joined}")
 
 
-async def _download_dependencies(client, version, mc_version, loader, save_dir,
-                                 processed, task_state, gate, depth):
-    """递归处理 version 的 required 强制前置依赖"""
+async def _download_dependencies(mr_client, cf_client, version, src_name, mc_version, loader,
+                                 save_dir, processed, task_state, gate, depth, force_source=None):
+    """递归处理 version 的 required 强制前置依赖（多源版本）"""
     indent = "  " * depth
     for dep in version.get("dependencies") or []:
         await gate.check()
         if dep.get("dependency_type") != "required":
             continue
-        dep_pid = dep.get("project_id")
-        # 部分依赖（如 minecraft、特定 loader 本身）project_id 为空，跳过
+        dep_pid = dep.get("project_id") or dep.get("modId")
         if not dep_pid:
             continue
         if dep_pid in processed:
             continue
-        task_state.add_log(f"{indent}  ↳ 前置依赖: {dep_pid}", "info")
+        task_state.add_log(f"{indent}  ↳ 前置依赖: {dep_pid} ({src_name}偏好)", "info")
         await _resolve_and_download(
-            client, dep_pid, mc_version, loader, save_dir,
-            processed, task_state, gate, depth + 1)
+            mr_client, cf_client, dep_pid, mc_version, loader, save_dir,
+            processed, task_state, gate, depth + 1, force_source=force_source)
 
 
 async def _export_missing(state, save_dir):
@@ -646,19 +756,20 @@ async def _export_missing(state, save_dir):
         state.add_log(f"导出缺失清单失败: {e}", "error")
 
 
-async def run_batch_download(client, json_path, mc_version, loader, save_dir, task_state, gate,
-                             project_ids=None):
-    """批量下载：读取 HMCL 兼容 modlist，逐个解析下载
+async def run_batch_download(mr_client, json_path, mc_version, loader, save_dir, task_state, gate,
+                             project_ids=None, cf_client=None, global_source=None):
+    """批量下载：读取 HMCL 兼容 modlist，逐个解析下载（多源版本）
 
-    :param client: ModrinthClient
-    :param json_path: modlist.json 路径
-    :param mc_version: 目标 MC 游戏版本
-    :param loader: 目标加载器
-    :param save_dir: 模组保存目录
-    :param task_state: 任务状态对象
-    :param gate: 任务门控
-    :param project_ids: 可选，仅下载指定的 project_id 列表
+    :param mr_client: ModrinthClient
+    :param cf_client:  CurseForgeClient（可 None）
+    :param global_source: 可选，全局强制下载源（modrinth / curseforge / auto / None），
+                          清单中每个 project 自带的 source 优先级更高
     """
+    if cf_client is None:
+        cf_client = CurseForgeClient()
+    # 如果用户在 settings 里没有明确 source，允许接口传入的 global_source 覆盖默认值，
+    # 真正优先级顺序：project.source > global_source > settings.source
+    default_source = (global_source or "auto").lower() if global_source else None
     task_state.kind = "batch"
     task_state.mc_version = mc_version
     task_state.loader = loader
@@ -690,16 +801,17 @@ async def run_batch_download(client, json_path, mc_version, loader, save_dir, ta
         task_state.finished_at = time.time()
         return
 
-    # 去重集合，跨项目共享，防止重复下载与循环依赖
     processed = set()
     for i, p in enumerate(projects):
         await gate.check()
         pid = (p or {}).get("project_id")
+        force_source = (p or {}).get("source") or default_source
         task_state.done = i
         if not pid:
             continue
         await _resolve_and_download(
-            client, pid, mc_version, loader, save_dir, processed, task_state, gate)
+            mr_client, cf_client, pid, mc_version, loader, save_dir,
+            processed, task_state, gate, force_source=force_source)
 
     task_state.done = task_state.total
     await _export_missing(task_state, save_dir)
@@ -711,8 +823,11 @@ async def run_batch_download(client, json_path, mc_version, loader, save_dir, ta
         f"失败 {len(task_state.failed)}，缺失 {len(task_state.missing)}", "info")
 
 
-async def run_single_download(client, project_id, mc_version, loader, save_dir, task_state, gate):
-    """单模组下载：根据 project_id 下载单个模组及其前置依赖"""
+async def run_single_download(mr_client, project_id, mc_version, loader, save_dir, task_state, gate,
+                              cf_client=None, force_source=None):
+    """单模组下载：根据 project_id 下载单个模组及其前置依赖（多源版本）"""
+    if cf_client is None:
+        cf_client = CurseForgeClient()
     task_state.kind = "single"
     task_state.mc_version = mc_version
     task_state.loader = loader
@@ -733,7 +848,8 @@ async def run_single_download(client, project_id, mc_version, loader, save_dir, 
 
     processed = set()
     await _resolve_and_download(
-        client, project_id, mc_version, loader, save_dir, processed, task_state, gate)
+        mr_client, cf_client, project_id, mc_version, loader, save_dir,
+        processed, task_state, gate, force_source=force_source)
 
     task_state.done = 1
     await _export_missing(task_state, save_dir)

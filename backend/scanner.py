@@ -1,8 +1,9 @@
-"""模组文件夹扫描、Jar 元数据解析、sha512 哈希计算与 Modrinth 反查
+"""模组文件夹扫描、Jar 元数据解析、哈希计算与多平台反查
 
 关键点：
 - 使用 zipfile 纯 Python 读取 jar 内部 fabric.mod.json / mods.toml，无需 Java 环境
 - 计算 sha512 后调用 Modrinth version_files 接口批量反查 project_id
+- Modrinth 未匹配时，回退 CurseForge murmur2 指纹反查
 - 无法识别的模组标记 matched=False，前端标灰展示
 """
 import hashlib
@@ -104,11 +105,16 @@ def parse_jar_metadata(jar_path):
     return info
 
 
-async def scan_mods(folder, client, log_cb=None):
-    """扫描 mods 目录，解析元数据并通过 Modrinth 哈希反查 project_id
+async def scan_mods(folder, client, cf_client=None, log_cb=None):
+    """扫描 mods 目录，解析元数据并通过多平台哈希反查 project_id
+
+    匹配顺序（符合 settings.source=auto 行为）：
+      1. 先尝试 Modrinth（sha512）
+      2. 未匹配的再尝试 CurseForge（murmur2）——当传入 cf_client 时启用
 
     :param folder: mods 目录路径
     :param client: ModrinClient 实例
+    :param cf_client: 可选 CurseForgeClient 实例
     :param log_cb: 可选异步日志回调 async cb(msg)
     :return: 模组信息列表
     """
@@ -116,7 +122,6 @@ async def scan_mods(folder, client, log_cb=None):
     if not folder_path.is_dir():
         raise FileNotFoundError(f"目录不存在或不是文件夹: {folder}")
 
-    # 遍历所有 .jar 文件（不递归子目录，HMCL mods 目录通常平铺）
     jar_files = sorted(folder_path.glob("*.jar"))
     if not jar_files:
         return []
@@ -124,15 +129,23 @@ async def scan_mods(folder, client, log_cb=None):
     results = []
     for jar in jar_files:
         meta = parse_jar_metadata(jar)
-        file_hash = compute_sha512(jar)
+        sha512 = compute_sha512(jar)
+        murmur2 = None
+        if cf_client is not None:
+            from .curseforge_client import compute_cf_murmur2
+            try:
+                murmur2 = compute_cf_murmur2(jar)
+            except OSError:
+                murmur2 = None
         results.append({
             "filename": jar.name,
             "path": str(jar),
-            "sha512": file_hash,
+            "sha512": sha512,
+            "murmur2": murmur2,
             "size": jar.stat().st_size,
             "metadata": meta,
-            # Modrinth 反查结果字段
             "matched": False,
+            "source": None,          # "modrinth" / "curseforge"
             "project_id": None,
             "version_id": None,
             "version_name": None,
@@ -143,26 +156,53 @@ async def scan_mods(folder, client, log_cb=None):
         if log_cb:
             await log_cb(f"扫描文件: {jar.name}")
 
-    # 批量哈希反查 Modrinth，获取 project_id
+    # 第 1 步：Modrinth sha512 批量反查
     hashes = [r["sha512"] for r in results]
     if log_cb:
-        await log_cb(f"正在向 Modrinth 反查 {len(hashes)} 个文件哈希...")
+        await log_cb(f"正在向 Modrinth 反查 {len(hashes)} 个 sha512 哈希...")
+    mapping = {}
     try:
         mapping = await client.get_files_by_hashes(hashes, "sha512")
     except Exception as e:
         if log_cb:
             await log_cb(f"Modrinth 哈希反查失败: {e}")
-        mapping = {}
-
+    matched_ids = set()
     for r in results:
         hit = mapping.get(r["sha512"])
         if hit:
             r["matched"] = True
+            r["source"] = "modrinth"
             r["project_id"] = hit.get("project_id")
             r["version_id"] = hit.get("id")
             r["version_name"] = hit.get("name")
             r["version_number"] = hit.get("version_number")
             r["game_versions"] = hit.get("game_versions", [])
             r["loaders"] = hit.get("loaders", [])
+            matched_ids.add(id(r))
+
+    # 第 2 步：CurseForge murmur2 反查（仅未匹配的）
+    if cf_client is not None:
+        cf_candidates = [(r["murmur2"], r) for r in results if id(r) not in matched_ids and r["murmur2"]]
+        if cf_candidates:
+            cf_fp_list = [m for m, _ in cf_candidates]
+            if log_cb:
+                await log_cb(f"正在向 CurseForge 反查 {len(cf_fp_list)} 个 murmur2 指纹...")
+            try:
+                cf_map = await cf_client.get_files_by_fingerprints(cf_fp_list)
+            except Exception as e:
+                if log_cb:
+                    await log_cb(f"CurseForge 指纹反查失败: {e}")
+                cf_map = {}
+            for murmur2, r in cf_candidates:
+                hit = cf_map.get(murmur2)
+                if hit:
+                    r["matched"] = True
+                    r["source"] = "curseforge"
+                    r["project_id"] = hit.get("project_id")
+                    r["version_id"] = hit.get("version_id")
+                    r["version_name"] = hit.get("name")
+                    r["version_number"] = hit.get("version_number")
+                    r["game_versions"] = hit.get("game_versions", [])
+                    r["loaders"] = hit.get("loaders", [])
 
     return results
