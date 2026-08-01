@@ -1,119 +1,156 @@
 # ModList-Weaver
 
-> Minecraft **双源（Modrinth + CurseForge）** 模组批量迁移桌面工具 —— 本地扫描、清单导出、断点续传、哈希校验、依赖递归一站式解决。
+> Minecraft 双源（Modrinth / CurseForge）模组迁移桌面工具 —— 一键扫描本地 mods，导出 HMCL 兼容清单，跨版本/跨加载器批量重下载，自带断点续传、哈希校验、依赖递归与任务队列。
 
-基于 FastAPI + pywebview 的跨平台桌面应用，无需 Java 环境，纯 Python 解析 jar 元数据并通过 Modrinth / CurseForge 双平台 API 完成模组迁移。适用于 HMCL 等启动器用户的版本切换、整合包迁移、依赖补齐等场景。
-
----
-
-## 版本历史 / Changelog
-
-> 📦 每个大版本（V1.0 / V2.0 / V3.0 …）都已通过 GitHub Actions 打包为 Windows 单目录分发包，可在仓库 **Releases** 页直接下载。
+当前版本：**v3.0.0** · 平台：Windows x64（PyInstaller 打包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
 
 ---
 
-### 🚀 V3.0 —— 断点续传 + CurseForge 双源 + 自动化 CI/CD（2026-08）
+## 目录
 
-**当前最新正式版本 · `git tag v3.0.0`**
-
-| 分类 | 功能点 |
-|---|---|
-| 🔁 **断点续传** | `.part` 临时文件 + HTTP Range 请求检测，下载中断后保留已下载字节，下次自动从断点续传（Modrinth / CurseForge 双客户端一致实现） |
-| 🌐 **CurseForge 双源支持** | 新增独立 `CurseForgeClient`：murmur2 指纹匹配、项目搜索、版本列表、依赖递归、文件下载、服务端 429/速率节流自适应 |
-| 🔀 **多源自动路由** | `settings.source = auto/modrinth/curseforge`；扫描时 Modrinth sha512 未命中 → 自动 fallback CurseForge murmur2；下载时数字 project_id 优先 CurseForge，slug 优先 Modrinth |
-| 🔐 **多算法哈希校验** | 哈希优先级自适应：`sha512 > sha1 > murmur2`，从各自源 API 返回的可用字段中自动选择最可靠的校验方案 |
-| 🧪 **单元测试 29/29 PASS** | 新增 `tests/` 三套 pytest 用例：`test_scanner.py`（哈希 + jar 解析） / `test_downloader_logic.py`（版本选择 + TaskGate + 限速器 + 哈希策略） / `test_curseforge_and_settings.py`（murmur2 + Settings 持久化边界） |
-| 🚀 **GitHub Actions CI** | `.github/workflows/ci.yml` 三阶段自动化：① 所有 push/PR → `windows × ubuntu` × `Python 3.10/3.11/3.12` 跑单测矩阵 ② `main/master/v* tag` → PyInstaller 打 Windows 包 ③ **打 `v*` 正式 tag** → 自动上传 `.zip` 到仓库 Release 页并生成发布说明 |
-| 🏗️ **工程化** | `build.spec` 补全 backend 各模块、hashlib hiddenimports；`requirements.txt` 加入 pytest 开发依赖；`.gitignore` 补 `build/ dist/ .pytest_cache/` |
-
----
-
-### 🧭 V2.0 —— 任务队列 + 实时监控 + 可暂停下载（2026-06）
-
-- **异步任务队列**：`run_batch_download` 任务队列化，默认并发 3（可配置），多任务并行独立调度
-- **协作式任务控制**：任务支持 `暂停 / 继续 / 停止 / 删除` 四元组；`TaskGate` 门控实现 awaitable 阻塞/放行/中断三种状态
-- **终态持久化**：任务完成 / 失败 / 停止后持久化到 `cache/temp/tasks.json`，重启后可查看历史并一键重试（`all / failed / missing` 三种作用域）
-- **实时监控**：文件粒度下载进度、瞬时网速（0.3s 滑动窗口，B/s → KB/s → MB/s → GB/s 自动换算）、跳过数独立统计
-- **实时日志流**：任务日志异步流式写入，支持前端 tail 读取，一键导出 `.log`
-- **令牌桶限速器**：`settings.rate_limit_mbps` 全局下行带宽节流（0 = 不限速）
-- **原生对话框**：基于 tkinter 的文件夹 / 文件 / 保存路径选择，不弹浏览器窗
-- **模组列表页**：Modrinth 关键词搜索 + MC 版本 + 加载器 + 项目类型筛选；单模组一键下载 + 自动补齐 required 前置依赖
+- [快速开始](#快速开始)
+- [配置](#配置)
+- [核心特性](#核心特性)
+- [技术栈](#技术栈)
+- [目录结构](#目录结构)
+- [API 接口](#api-接口)
+- [工作流](#工作流)
+- [版本历史](#版本历史)
+- [致谢](#致谢)
+- [License](#license)
 
 ---
 
-### 🌱 V1.0 —— 项目骨架：扫描 → 导出 → 批量下载 MVP（2026-04）
+## 快速开始
 
-- **纯 Python jar 元数据解析**：`scanner.py` 直接读取 jar 内部 `fabric.mod.json` / `mods.toml` / `MANIFEST.MF`，自动识别 Fabric / Quilt / Forge / NeoForge 加载器，**不依赖 Java 环境**
-- **sha512 批量反查**：本地 jar 算 sha512 → Modrinth `version_files` 批量接口反查 project_id，识别率高；未命中标灰人工处理
-- **HMCL 兼容清单导出**：一键导出 `modlist.json`，字段 `name / version / game_version / loader / projects[]` 完全匹配 HMCL 导入格式
-- **Modrinth 批量下载**：读取 modlist → 按目标 MC 版本 + 加载器选择适配版本 → sha512 去重校验（一致跳过 / 不一致覆盖）
-- **依赖递归**：`required` 前置依赖自动下载，`optional` 忽略；`processed` 集合去重防环
-- **缺失模组报告**：无适配版本的模组导出 `missing_mods.txt` 清单
-- **桌面壳**：`main.py` 启动 uvicorn 后端（127.0.0.1:8765~8810 自动找可用端口） + pywebview 内嵌 WebView2 桌面窗口（1200×840）
-- **深色科技风前端**：原生 HTML/CSS/JS 单页，左侧导航 + 右侧内容区 + 底部状态栏网速显示
-- **settings 持久化**：`cache/settings.json` 热更新 max_concurrency / rate_limit_mbps / theme
+### 方式一：下载 Release 可执行文件（推荐普通用户）
+
+1. 前往 [Releases](https://github.com/JonathanSssst/ModList-Weaver/releases/latest) 下载 `ModList-Weaver-Windows-vX.X.X.zip`
+2. 解压到任意目录
+3. 双击 `ModList-Weaver.exe` 即可启动（首次启动稍慢，会初始化缓存）
+
+> 桌面工具，不弹控制台黑窗；无需安装 Java / Python 环境。
+
+### 方式二：源码运行（开发者）
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/JonathanSssst/ModList-Weaver.git
+cd ModList-Weaver
+
+# 2. 创建虚拟环境（推荐 Python 3.11）
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
+
+# 3. 安装依赖
+pip install -r requirements.txt
+
+# 4. 启动应用
+python main.py
+```
+
+启动后程序会自动：
+
+1. 在 `8765~8810` 范围内查找可用端口
+2. 后台线程启动 FastAPI + uvicorn 服务
+3. 打开 pywebview 桌面窗口（内嵌网页，不弹浏览器）
+
+### 运行测试
+
+```bash
+pip install pytest pytest-asyncio
+python -m pytest tests -v --tb=short
+```
+
+预期输出：29 个用例全部 PASS。
+
+### 本地打包
+
+```bash
+pip install pyinstaller pywin32-ctypes
+pyinstaller build.spec
+# 产物位于 dist/ModList-Weaver/
+```
+
+---
+
+## 配置
+
+所有运行时配置持久化在 `cache/settings.json`（首次运行自动生成），支持应用内「设置」页热更新。
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `max_concurrency` | `3` | 同时运行的最大下载任务数 |
+| `rate_limit_mbps` | `0` | 全局下行带宽限制（MB/s），`0` 表示不限速 |
+| `theme` | `auto` | 界面主题：`auto` / `light` / `dark` |
+| `source` | `auto` | 下载源偏好：`auto`（先 Modrinth 后 CurseForge）/ `modrinth` / `curseforge` |
+| `curseforge_api_key` | `""` | 可选 CurseForge 官方 API Key；为空时走 `api.curse.tools` 公共镜像 |
+
+> 主题、下载源、并发数、限速等设置即时生效，无需重启。
 
 ---
 
 ## 核心特性
 
-### 扫描 & 识别（V3.0 多源）
-- 纯 Python 读取 jar 内部元数据（`fabric.mod.json` / `mods.toml` / `MANIFEST.MF`），自动识别 Fabric / Quilt / Forge / NeoForge 加载器
-- **先 Modrinth sha512 批量反查** → **未命中再 CurseForge murmur2 指纹反查**，识别率显著提升
-- 每个命中结果带 `source` 字段（`modrinth` / `curseforge`），前端可区分来源
-- 无法识别的模组在前端标灰展示，便于人工处理
+### 1. 双源模组识别与下载
 
-### 清单导出
-- 一键导出 HMCL 兼容的 `modlist.json` 清单（V3.0 新增 `source` 字段写入每项，保留来源信息）
-- 字段结构：`name / version:3.0 / game_version / loader / projects:[{project_id, source, ...}]`
+- **Modrinth** 走官方 v2 公开 API，使用 `sha512` 哈希反查
+- **CurseForge** 走社区镜像 `api.curse.tools`，使用 `murmur2` 指纹反查（无需 API Key）
+- 扫描阶段 Modrinth 未命中时自动 fallback 到 CurseForge，识别率显著提升
+- 下载源优先级：`project.source` > 接口 `global_source` > `settings.source`
 
-### 批量下载（V3.0 多源 + 断点续传）
-- 读取 modlist 后按 source / settings 偏好从 Modrinth 或 CurseForge 查询适配版本
-- 递归识别 `required` 强制前置依赖并自动下载（`optional` 可选依赖忽略）；依赖偏好跟随父模组来源，避免跨源混乱
-- `processed` 集合去重，防止循环依赖死循环
-- 无适配版本的模组自动标记缺失，导出 `missing_mods.txt` 清单
-- **断点续传**：下载中断后 `.part` 文件保留，下次启动自动检测 Range 支持并从断点续传，减少带宽浪费
+### 2. 断点续传
 
-### 哈希校验机制（V3.0 多算法自适应）
-下载前比对本地文件与服务端期望哈希（**按 sha512 > sha1 > murmur2 优先级自动选择最可靠的算法**）：
-- 哈希一致 → **跳过**，不重复下载
-- 哈希不一致 → **删除旧文件并覆盖**（处理旧版本或损坏文件）
-- 不存在 → 正常下载
+- 使用 `.part` 临时文件作为下载载体，避免半成品冒充成品
+- 下载前探测服务端 Range 支持，支持时从断点 HTTP Range 续传
+- 不支持 Range 或首次下载时从头开始，完成后原子 rename 为最终路径
+- Modrinth 与 CurseForge 客户端一致实现
 
-### 任务队列
-- 同时支持多任务排队（并发数可配置，默认 3）
-- 任务支持 **暂停 / 继续 / 停止 / 删除** 协作式控制
-- 终态任务持久化到 `cache/temp/tasks.json`，重启后可继续查看与重试
-- 失败/缺失模组可一键重试（按 `all / failed / missing` 作用域）
+### 3. 多算法哈希校验
 
-### 实时监控
-- 下载进度按文件粒度展示（已下载字节 / 总字节）
-- 瞬时网速显示（0.3s 采样窗口，自动单位换算 B/s → KB/s → MB/s → GB/s）
-- 跳过计数独立展示，区分"新下载"与"已存在校验通过"
-- 任务日志实时流式输出，可导出为 `.log` 文件
+优先级自适应：`sha512` > `sha1` > `murmur2`，按源 API 返回的可用字段选择最可靠的校验方案。
 
-### 其他
-- **双源模组搜索**：`/api/search_mod` 支持 `source=modrinth/curseforge`
-- **双源模组详情**：`/api/project/{id}` 支持 `source` 参数，或按 project_id 数字特征自动选择
-- 原生对话框：文件夹/文件选择、保存路径（基于 tkinter）
-- 网速限制：令牌桶限速器，全局下行带宽可配（MB/s，0 表示不限速）
+### 4. 依赖递归
+
+- 自动解析 `required` 强制前置依赖并下载
+- `optional` 可选依赖忽略
+- 使用 `processed` 集合去重，防止循环依赖死循环
+
+### 5. 任务队列与持久化
+
+- 同一时间仅执行设定数量的任务，其余 FIFO 排队
+- 支持 **暂停 / 继续 / 停止 / 删除**
+- 终态任务（completed / failed / stopped）持久化到 `cache/temp/tasks.json`，日志归档于 `cache/logs/`，重启不丢失
+- 任务结算页：查看失败 / 缺失明细、重试、打开源 / 目标目录
+
+### 6. 实时进度与网速
+
+- 双进度条：总任务进度 + 当前文件进度
+- 0.3s 时间窗口采样的瞬时网速显示
+- 跳过计数（已存在且哈希校验通过的模组）
+
+### 7. 现代化桌面 UI
+
+- pywebview 内嵌 WebView2，原生 HTML/CSS/JS 实现
+- 明暗主题一键切换，偏好持久化
+- 向导式工作流（扫描导出三步、批量下载四步）
 
 ---
 
 ## 技术栈
 
 | 层 | 技术 |
-|---|---|
-| 桌面壳 | pywebview（内嵌 WebView2，无系统浏览器弹窗） |
-| 后端 | FastAPI + uvicorn + httpx + pydantic |
-| **双源客户端** | `backend/modrinth_client.py`（Modrinth REST API + 断点续传） |
-|  | `backend/curseforge_client.py`（curse.tools 镜像 API + murmur2 指纹 + 速率节流） |
-| 前端 | 原生 HTML / CSS / JavaScript（深色科技风） |
-| 打包 | PyInstaller（目录模式，兼容开发态与打包态资源路径） |
-| **测试** | pytest + pytest-asyncio（29 个核心纯逻辑用例） |
-| **CI / 发布** | GitHub Actions（`test` 矩阵 + `build-windows` 打包上传 Release） |
-| 元数据解析 | zipfile + json + tomllib（Python 3.11+ 内置） |
-| 指纹哈希 | Modrinth: sha512；CurseForge: murmur2-hash（CF 文件指纹算法） |
+| --- | --- |
+| 后端 | Python 3.10+、FastAPI、uvicorn、httpx（异步 HTTP）、pydantic |
+| 桌面壳 | pywebview（Windows 走 EdgeChromium / WinForms 后端） |
+| 前端 | 原生 HTML + CSS + JavaScript（无构建步骤） |
+| 原生对话框 | tkinter（文件夹 / 文件 / 保存路径选择） |
+| 模组元数据解析 | zipfile + tomllib（无需 Java 环境） |
+| 哈希算法 | hashlib（sha512 / sha1）+ 自实现 Java 兼容 MurmurHash2 |
+| 打包 | PyInstaller（目录模式 COLLECT） |
+| 测试 | pytest + pytest-asyncio（29 用例） |
+| CI/CD | GitHub Actions（2 OS × 3 Python 矩阵 + 自动 Release） |
 
 ---
 
@@ -121,187 +158,233 @@
 
 ```
 ModList-Weaver/
-├── main.py                  # 程序入口：FastAPI + pywebview
-├── build.spec               # PyInstaller 打包配置（含 V3.0 CurseForge 相关 hiddenimports）
-├── requirements.txt         # Python 依赖（含 pytest / pytest-asyncio）
-├── .github/workflows/ci.yml # GitHub Actions CI：单测矩阵 + Windows 打包 + Release 上传
-├── backend/
-│   ├── api.py               # FastAPI 路由与接口定义（V3.0 新增 source 参数）
-│   ├── scanner.py           # jar 元数据解析 + sha512 / murmur2 双源哈希反查
-│   ├── downloader.py        # 下载队列 + 依赖递归 + 哈希校验 + 多源路由
-│   ├── modrinth_client.py   # Modrinth API 客户端（V3.0 新增断点续传）
-│   ├── curseforge_client.py # CurseForge 客户端（搜索 / 版本 / 依赖 / 下载 / 速率节流）★V3.0 新增
-│   └── settings.py          # 全局设置（扩展 source 字段）+ 令牌桶限速器
-├── tests/                   # pytest 测试用例（29 个，V3.0 新增）
-│   ├── test_scanner.py
-│   ├── test_downloader_logic.py
-│   └── test_curseforge_and_settings.py
-├── frontend/
-│   ├── index.html           # 前端入口
-│   ├── main.js              # 前端业务逻辑
-│   ├── style.css            # 深色主题样式
-│   └── src/images/          # 静态图片资源
-├── cache/                   # 运行时数据（已 gitignore）
-│   ├── settings.json        # 用户设置
-│   ├── temp/tasks.json      # 任务历史持久化
-│   └── logs/                # 任务日志缓存
-├── mods/                    # 临时模组存放目录（运行时填充，已 gitignore）
-└── output/                  # 导出清单输出目录（已 gitignore）
+├── main.py                     # 程序入口：启动 FastAPI + pywebview
+├── requirements.txt            # 依赖清单
+├── build.spec                  # PyInstaller 打包配置
+├── README.md
+│
+├── backend/                    # 后端：FastAPI + 业务逻辑
+│   ├── __init__.py
+│   ├── api.py                  # FastAPI 路由 + 版本常量 + Changelog（单一事实来源）
+│   ├── scanner.py              # mods 目录扫描、jar 元数据解析、哈希反查
+│   ├── modrinth_client.py      # Modrinth v2 API 异步客户端（含断点续传）
+│   ├── curseforge_client.py    # CurseForge 客户端 + murmur2 指纹实现
+│   ├── downloader.py           # 下载核心：TaskManager / TaskGate / 多源递归
+│   └── settings.py             # 全局设置 + 令牌桶限速器
+│
+├── frontend/                   # 前端：原生 HTML/CSS/JS
+│   ├── index.html              # 单页应用外壳 + 8 个页面 (A~H)
+│   ├── main.js                 # 交互逻辑（侧边栏 / 向导 / 轮询 / 主题）
+│   ├── style.css               # 明暗主题样式
+│   └── src/images/             # 静态图片（作者头像等）
+│
+├── static/                     # PyInstaller 打包态前端资源备份
+│
+├── tests/                      # pytest 单元测试
+│   ├── __init__.py
+│   ├── test_scanner.py         # 哈希计算 / jar 元数据解析
+│   ├── test_downloader_logic.py# 版本选择 / TaskGate / 限速器 / 哈希策略
+│   └── test_curseforge_and_settings.py  # murmur2 / Settings 持久化
+│
+├── .github/workflows/ci.yml    # GitHub Actions：测试矩阵 + 打包 + Release
+├── .gitignore
+│
+└── cache/                      # 运行时数据（gitignored）
+    ├── settings.json           # 用户设置
+    ├── temp/tasks.json         # 终态任务持久化
+    └── logs/                   # 任务日志归档
 ```
-
----
-
-## 快速开始
-
-### 环境要求
-- Python 3.10+（推荐 3.11+，原生支持 `tomllib`）
-- Windows / macOS / Linux 桌面环境（pywebview 依赖系统 WebView）
-
-### 安装依赖
-
-```bash
-pip install -r requirements.txt
-```
-
-依赖清单：
-```
-fastapi>=0.110.0
-uvicorn>=0.27.0
-httpx>=0.27.0
-pywebview>=4.4
-pydantic>=2.5
-pytest>=8.0
-pytest-asyncio>=0.23
-```
-
-### 运行
-
-```bash
-python main.py
-```
-
-应用会在 `127.0.0.1:8765~8810` 范围内自动查找可用端口，启动 FastAPI 后端并打开 pywebview 桌面窗口（1200×840，最小 980×680）。
-
-### 单元测试（V3.0）
-
-```bash
-python -m pytest tests -v
-```
-
-当前覆盖 29 个纯逻辑用例，不依赖真实网络，CI 里也会在 Windows / Ubuntu × Python 3.10 / 3.11 / 3.12 矩阵下运行。
-
-### 打包为可执行文件
-
-```bash
-pyinstaller build.spec
-```
-
-产物位于 `dist/ModList-Weaver/ModList-Weaver.exe`（目录模式，保留前端资源结构）。
-
----
-
-## GitHub Actions CI / 发布（V3.0）
-
-`.github/workflows/ci.yml` 定义了 2 个 job，push / PR / tag 触发：
-
-| Job | 触发条件 | 做什么 |
-|---|---|---|
-| `test` | 所有 push / PR | `windows-latest` + `ubuntu-latest` × Python 3.10 / 3.11 / 3.12 矩阵跑 `pytest tests` |
-| `build-windows` | 仅 `main / master` push **或** `v*` tag | 1. 单测通过后 2. PyInstaller 打 Windows 包 3. 压缩为 `<name>-Windows-<tag>.zip` 4. 同时传 Artifact（30 天）与 GitHub Release（仅 v* tag） |
-
-**发布流程**：
-```bash
-# 1) 本地打好 tag 并推送
-git tag v3.0.0
-git push origin v3.0.0
-
-# 2) GitHub Actions 自动：跑测试 → 打包 → 上传 Release 页
-#    产物：ModList-Weaver-Windows-v3.0.0.zip
-```
-
----
-
-## 工作流
-
-应用左侧导航分为两组：
-
-**A. 扫描 & 导出清单**（三步向导）
-1. 选择本地 mods 目录 → 自动扫描所有 `.jar` 文件
-2. **双源反查**：先 Modrinth sha512 → 未命中再 CurseForge murmur2，获取 `project_id` + `source`
-3. 导出 HMCL 兼容的 modlist.json（带来源字段）
-
-**B. 批量下载模组**（三步向导 + 断点续传）
-1. 选择 modlist.json + 目标 MC 版本 + 加载器 + 保存目录（可在 settings 中指定下载源优先级：`auto / modrinth / curseforge`）
-2. 预览清单可勾选下载范围
-3. 启动下载队列，实时监控进度与网速；**中断后保留 `.part`，下次自动续传**
-
-**C. 模组列表**
-- **双源浏览**：搜索时可选 `source=modrinth/curseforge`
-- 查看模组详情（图标、作者、版本、更新日志）
-- 单模组下载（自动补齐 required 前置依赖，依赖来源默认跟随父模组）
-
-**D. 任务中心**
-- 查看进行中队列与已完成历史
-- 暂停 / 继续 / 停止 / 删除任务
-- 重试失败或缺失模组
-- 查看 / 导出任务日志
 
 ---
 
 ## API 接口
 
-后端 FastAPI 提供 REST 接口（关闭了 docs_url，可通过代码注释查看完整列表），核心端点：
+后端 FastAPI 服务监听 `http://127.0.0.1:{port}`，端口在 `8765~8810` 范围内自动选择。所有接口前缀 `/api`。
+
+### 版本与元信息
 
 | 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | `/api/scan_mods` | 扫描 mods 目录并双源反查 project_id |
-| POST | `/api/export_json` | 导出 HMCL 兼容 modlist（带来源） |
-| POST | `/api/preview_list` | 预览 modlist 清单 |
-| POST | `/api/download_from_list` | 批量下载（入队，支持断点续传） |
-| POST | `/api/search_mod` | 关键词搜索（`source` 可选 modrinth / curseforge） |
-| GET | `/api/project/{id}` | 模组详情（`source` 可选，按 ID 特征自动） |
-| GET | `/api/mc_versions` | Minecraft 官方版本列表（6h 缓存） |
-| POST | `/api/download_single_mod` | 单模组 + 依赖下载（双源） |
-| GET | `/api/queue` | 队列快照（进行中 + 历史） |
-| GET | `/api/task_status` | 轮询任务进度 |
-| POST | `/api/task_pause\|resume\|stop\|delete` | 任务控制 |
-| POST | `/api/retry_task` | 重试失败/缺失模组 |
-| GET | `/api/logs/{id}` | 读取任务日志 |
-| GET | `/api/logs/{id}/download` | 导出日志为 .log |
-| GET | `/api/pick_folder\|file\|save` | 原生对话框 |
-| GET/POST | `/api/settings` | 读取/更新设置（含 `source` 下载源偏好） |
+| --- | --- | --- |
+| GET | `/api/version` | 当前版本 + 完整 Changelog + Release 下载链接 |
+| GET | `/api/mc_versions` | Minecraft 官方版本列表（6 小时缓存） |
+
+### 扫描与导出
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/scan_mods` | 扫描 mods 目录，多源哈希反查 project_id |
+| POST | `/api/export_json` | 生成 HMCL 兼容 modlist.json 并保存 |
+| POST | `/api/preview_list` | 解析 modlist.json 返回清单（下载前勾选用） |
+
+### 搜索与详情
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/search_mod` | 关键词搜索模组（支持 `source` 切换双源） |
+| GET | `/api/project/{id}` | 模组详情：图标 / 作者 / 版本列表 / 更新日志 |
+
+### 下载
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/download_from_list` | 读取 modlist 启动批量下载（入队） |
+| POST | `/api/download_single_mod` | 单模组 + 前置依赖下载（入队） |
+| POST | `/api/retry_task` | 按 scope 重试失败 / 缺失模组 |
+
+### 任务队列控制
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/queue` | 队列快照：进行中 + 已完成历史 |
+| GET | `/api/task_status` | 轮询单个任务进度（不传返回最近一个） |
+| POST | `/api/task_pause` | 暂停任务 |
+| POST | `/api/task_resume` | 继续任务 |
+| POST | `/api/task_stop` | 停止任务 |
+| POST | `/api/task_delete` | 删除任务 |
+
+### 日志与设置
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/logs/{id}` | 读取任务日志缓存 |
+| GET | `/api/logs/{id}/download` | 导出日志为 `.log` 文件 |
+| GET | `/api/settings` | 读取当前设置 |
+| POST | `/api/settings` | 更新设置（即时生效） |
+
+### 原生对话框
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/pick_folder` | 原生文件夹选择 |
+| GET | `/api/pick_file` | 原生文件选择 |
+| GET | `/api/pick_save` | 原生保存路径选择 |
+| POST | `/api/open_folder` | 在资源管理器中打开文件夹 |
 
 ---
 
-## 配置
+## 工作流
 
-设置持久化在 `cache/settings.json`，运行时热更新：
+### A. 扫描导出（三步向导）
 
-```json
-{
-  "max_concurrency": 3,
-  "rate_limit_mbps": 0,
-  "theme": "auto",
-  "source": "auto"
-}
+```
+选择 mods 目录
+   ↓
+扫描 jar 文件 → 解析 fabric.mod.json / mods.toml
+   ↓
+计算 sha512 + murmur2 → Modrinth 反查 → 未命中 fallback CurseForge
+   ↓
+勾选要导出的模组（未识别标灰置顶）
+   ↓
+导出 HMCL 兼容 modlist.json（含 source 字段）
 ```
 
-- `max_concurrency`：最大并发下载任务数（默认 3）
-- `rate_limit_mbps`：全局下行限速（MB/s，0 = 不限速）
-- `theme`：主题模式（auto / light / dark）
-- **`source`**：下载源偏好（`auto` 自动 / `modrinth` 仅 Modrinth / `curseforge` 仅 CurseForge，默认 auto）
+### B. 批量下载（四步向导）
+
+```
+选择 modlist.json
+   ↓
+预览清单 + 勾选要下载的模组
+   ↓
+选择目标 MC 版本 + 加载器 + 保存目录
+   ↓
+入队下载 → 多源路由 → 已存在哈希校验 → 断点续传 → 依赖递归
+   ↓
+任务结算页：成功 / 跳过 / 失败 / 缺失 + 重试 + 导出缺失清单
+```
+
+### C. 模组列表
+
+关键词搜索 + 双源切换 + 分页浏览 + 模组详情页（图标 / 版本 / 作者 / 更新日志）+ 一键单模组下载（含前置依赖）。
+
+### D. 任务中心
+
+- 进行中任务：双进度条 + 实时网速 + 暂停 / 继续 / 停止 / 删除
+- 已完成任务：持久化历史 + 查看日志 / 导出日志 + 重试 + 打开目录
+
+### 多源下载路由策略
+
+```
+project_id 是数字？
+  ├─ 是 → CurseForge 优先 → Modrinth 兜底
+  └─ 否 → Modrinth 优先 → CurseForge 兜底
+
+settings.source = modrinth / curseforge 时强制单源
+project.source 字段优先级最高
+```
+
+---
+
+## 版本历史
+
+完整 Changelog 在软件内「更新日志」页动态渲染（数据源：`backend/api.py:CHANGELOG`）。
+
+### v3.0.0（2026-08）· 断点续传 + CurseForge 双源 + 自动化 CI/CD
+
+- **断点续传**：`.part` 临时文件 + HTTP Range，下载中断不浪费带宽（双客户端一致实现）
+- **CurseForge 双源**：新增独立客户端，murmur2 指纹匹配、依赖递归、429 速率节流自适应
+- **多源自动路由**：`settings.source = auto / modrinth / curseforge`；扫描阶段 Modrinth 未命中自动 fallback CurseForge
+- **多算法哈希校验**：sha512 > sha1 > murmur2 优先级自适应
+- **pytest 单测 29/29 PASS**：scanner / downloader / curseforge / settings 三套用例
+- **GitHub Actions CI/CD**：2 OS × 3 Python 测试矩阵；PyInstaller 自动打包；`v*` tag 自动上传 Release
+- **工程化**：`build.spec` 补 hiddenimports；`.gitignore` 完善；requirements 加入开发依赖
+
+### v2.5（2026-07）· 交互细节与 UI 稳定性
+
+- 修复批量下载勾选后「下一步」按钮无响应
+- 任务 / 历史列表删除按钮图标补全
+- 结算页信息卡片重排版，长文本不再错位
+- 进入结算页新增淡入上滑过渡动画
+
+### v2.4（2026-06）· 设置页 · 主题 · 四步下载向导
+
+- 新增「设置」页：并发数 + 全局限速，热更新即时生效
+- 明暗主题一键切换，偏好持久化
+- 批量下载改为四步向导（新增清单预览与勾选步骤）
+- 双进度条：总任务 + 当前文件
+- 模组详情版本列表支持折叠展开更新日志
+
+### v2.2（2026-05）· 任务持久化 · 结算页 · 更新日志页
+
+- 终态任务持久化本机，重启不丢失
+- 日志改为「查看 / 导出」，归档于 `cache/logs`
+- 新增任务结算页：失败 / 缺失明细 + 重试 + 打开目录
+- 新增独立「更新日志」页
+
+### v2.1（2026-05）· 模组列表 · 单模组下载 · 关于页
+
+- 合并搜索与详情为「模组列表」页，分页展示
+- 模组详情页新增一键下载（含 required 前置依赖）
+- 新增「关于」页面
+
+### v2.0（2026-04）· 下载队列 · 任务中心 · 扫描向导
+
+- 下载队列：排队执行 + 暂停 / 继续 / 停止 / 删除
+- 模组详情页（图标、版本、作者、简介）
+- 扫描导出改为三步向导，未识别模组标灰置顶
+
+### v1.0（2026-04）· MVP 首发
+
+- 扫描 mods 目录并通过文件哈希反查 Modrinth
+- 导出 HMCL 兼容 modlist.json
+- 批量 / 单模组下载（自动解析 required 前置依赖）
 
 ---
 
 ## 致谢
 
-- [Modrinth](https://modrinth.com/) —— 提供开放的模组 API
-- [CurseForge](https://www.curseforge.com/) 与 [curse.tools 镜像 API](https://curse.tools/) —— 提供 CurseForge 生态的无密钥访问接口
-- [HMCL](https://hmcl.huangyuhui.net/) —— modlist 清单格式参考
-- 所有 Minecraft 模组开发者
+- [Modrinth](https://modrinth.com/) —— 开放友好的 Minecraft 模组平台，提供无需 Token 的 v2 公开 API
+- [CurseForge](https://www.curseforge.com/) —— 老牌模组仓库
+- [curse.tools](https://curse.tools/) —— 长期维护的 CurseForge 公共镜像，让无 Key 访问成为可能
+- [Mojang](https://www.minecraft.net/) —— Minecraft 官方版本清单 API
+- [FastAPI](https://fastapi.tiangolo.com/) / [uvicorn](https://www.uvicorn.org/) / [httpx](https://www.python-httpx.org/) —— 后端核心依赖
+- [pywebview](https://pywebview.flowrl.com/) —— 让 Python 也能优雅地构建桌面 GUI
+- [PyInstaller](https://pyinstaller.org/) —— Windows 单目录打包
+- 所有为本项目提 issue、提建议、做测试的 Minecraft 玩家
 
 ---
 
 ## License
 
-本项目仅供学习与个人使用。模组版权归各自作者所有，请遵守 Modrinth 与各模组的许可协议。
+本项目仅供学习交流使用，遵循 MIT License 开源。
+
+模组本身的版权归属各模组作者，本工具仅作为下载与迁移的辅助工具，不参与任何模组内容的再分发。
