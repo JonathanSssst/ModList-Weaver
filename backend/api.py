@@ -2,7 +2,7 @@
 
 接口列表：
 GET  /api/version              当前软件版本 + 版本历史（Changelog）
-   GET  /api/changelog           读取本地 CHANGELOG.md 文档（V3.3.1）
+   GET  /api/changelog           读取本地 CHANGELOG.md 文档（V3.3.2）
   POST /api/scan_mods            扫描 mods 目录，返回模组列表 + project_id 反查结果
   POST /api/check_updates        检测已识别模组是否有新版本（V3.1）
   POST /api/export_json          生成 modlist 并保存本地
@@ -58,12 +58,22 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.3.1"
+CURRENT_VERSION = "3.3.2"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.3.2",
+        "date": "2026-08",
+        "title": "操作后页面状态重置 · 更新日志与侧边栏修复",
+        "items": [
+            "【页面重置】扫描、导出、批量下载、单模组下载与本地模组更新等操作完成后，自动将对应页面向导与表单恢复到初始状态，便于连续进行下一次操作。",
+            "【界面修复】修复侧边栏点击无响应的致命脚本错误（重复声明变量导致整份脚本无法加载），恢复全部页面切换与交互。",
+            "【更新日志修复】修复更新日志页面顶部出现多余蓝色横条的问题（文档标题被误当作日志条目渲染）。",
+        ],
+    },
     {
         "version": "3.3.1",
         "date": "2026-08",
@@ -189,7 +199,7 @@ async def api_version():
 
 @app.get("/api/changelog")
 async def api_changelog():
-    """读取本地 CHANGELOG.md 文档内容（V3.3.1）"""
+    """读取本地 CHANGELOG.md 文档内容（V3.3.2）"""
     changelog_path = Path(__file__).resolve().parent.parent / "CHANGELOG.md"
     if changelog_path.exists():
         try:

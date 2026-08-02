@@ -257,6 +257,74 @@ function switchPage(pageId) {
     }
 }
 
+// 操作完成后页面初始化（V3.3.2）：清理向导与表单，回到初始状态
+function resetPage(pageId) {
+    switch (pageId) {
+        case "pageA":
+            state.scannedMods = [];
+            state.updateMap = {};
+            state.wizardStep = 1;
+            ["scanFolder", "exportPath"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = "";
+            });
+            const exportMc = document.getElementById("exportMc");
+            if (exportMc) exportMc.value = "";
+            ["statTotal", "statMatched", "statUnmatched"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = "0";
+            });
+            const upCount = document.getElementById("updateCount");
+            if (upCount) upCount.textContent = "";
+            renderModList(state.scannedMods);
+            showWizardStep(1, true);
+            break;
+        case "pageB":
+            state.bpItems = [];
+            state.bStep = 1;
+            ["jsonPath", "batchMc", "batchSaveDir"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = "";
+            });
+            const bpList = document.getElementById("bpList");
+            if (bpList) bpList.innerHTML = `
+                <div class="empty-state compact">
+                    <div class="empty-state-title">暂无预览</div>
+                    <div class="empty-state-desc">请先选择 modlist.json 清单文件。</div>
+                </div>`;
+            const bpInfo = document.getElementById("bpInfo");
+            if (bpInfo) bpInfo.textContent = "—";
+            const btnBStep = document.getElementById("btnBStepNext");
+            if (btnBStep) btnBStep.disabled = true;
+            const btnBPrev = document.getElementById("btnBPNext");
+            if (btnBPrev) btnBPrev.disabled = true;
+            updateBPCount();
+            showBStep(1, true);
+            break;
+        case "pageC":
+            state.catDetail = false;
+            showCView("list");
+            break;
+        case "pageE":
+            state.manMods = [];
+            state.manUpdateMap = {};
+            const manFolder = document.getElementById("manFolder");
+            if (manFolder) manFolder.value = "";
+            const manMc = document.getElementById("manMc");
+            if (manMc) manMc.value = "";
+            ["manTotal", "manActive", "manDisabled", "manUpdates"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = "0";
+            });
+            const manCnt = document.getElementById("manUpdateCount");
+            if (manCnt) manCnt.textContent = "";
+            const manBtn = document.getElementById("btnManUpdate");
+            if (manBtn) manBtn.disabled = true;
+            renderManList();
+            break;
+    }
+}
+
 // 页面 C 子视图切换
 function showCView(view) {
     const list = document.getElementById("catListView");
@@ -572,6 +640,7 @@ document.getElementById("btnExport").addEventListener("click", async () => {
             save_path: savePath,
         });
         toast(`已导出 ${data.count} 个模组 → ${data.save_path}`, "ok");
+        resetPage("pageA");
     } catch (e) {
         toast("导出失败：" + e.message, "err");
     } finally {
@@ -773,6 +842,7 @@ document.getElementById("btnBatchDownload").addEventListener("click", async () =
             project_ids: projectIds,
         });
         toast(data.queued ? "已加入下载队列排队" : "批量下载已启动", "ok");
+        resetPage("pageB");
         switchPage("pageD");
     } catch (e) {
         toast("启动失败：" + e.message, "err");
@@ -1075,6 +1145,7 @@ document.getElementById("modDetail").addEventListener("click", async (e) => {
                 project_id: pid, mc_version: mc, loader, save_dir: saveDir,
             });
             toast(data.queued ? "已加入下载队列排队" : "单模组下载已启动", "ok");
+            resetPage("pageC");
             switchPage("pageD");
         } catch (err) {
             toast("启动失败：" + err.message, "err");
@@ -1309,6 +1380,7 @@ async function downloadInstalledUpdates() {
             updates, mc_version: mc, loader, save_dir: saveDir,
         });
         toast(data.queued ? "更新任务已加入队列" : "模组更新已启动", "ok");
+        resetPage("pageE");
         switchPage("pageD");
     } catch (e) {
         toast("启动更新失败：" + e.message, "err");
