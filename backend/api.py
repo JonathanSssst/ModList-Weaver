@@ -2,7 +2,7 @@
 
 接口列表：
 GET  /api/version              当前软件版本 + 版本历史（Changelog）
-   GET  /api/changelog           读取本地 CHANGELOG.md 文档（V3.3.2）
+   GET  /api/changelog           读取本地 CHANGELOG.md 文档（V3.4.0）
   POST /api/scan_mods            扫描 mods 目录，返回模组列表 + project_id 反查结果
   POST /api/check_updates        检测已识别模组是否有新版本（V3.1）
   POST /api/export_json          生成 modlist 并保存本地
@@ -58,12 +58,22 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.3.2"
+CURRENT_VERSION = "3.4.0"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.4.0",
+        "date": "2026-08",
+        "title": "发布安装包 · 便携版整理为单文件夹",
+        "items": [
+            "【安装包】新增 Windows 安装版（.setup.exe），双击安装到 %LocalAppData%\\ModList-Weaver，自动创建开始菜单 / 桌面快捷方式，无需管理员权限。",
+            "【便携版】zip 压缩包改为包含顶层文件夹，解压后得到单一 ModList-Weaver 文件夹，不再需要分别提取 .exe 与 _internal。",
+            "【发布】GitHub Release 同时提供便携版与安装版两种分发方式，CI 自动构建并上传。",
+        ],
+    },
     {
         "version": "3.3.2",
         "date": "2026-08",
@@ -199,7 +209,7 @@ async def api_version():
 
 @app.get("/api/changelog")
 async def api_changelog():
-    """读取本地 CHANGELOG.md 文档内容（V3.3.2）"""
+    """读取本地 CHANGELOG.md 文档内容（V3.4.0）"""
     changelog_path = Path(__file__).resolve().parent.parent / "CHANGELOG.md"
     if changelog_path.exists():
         try:

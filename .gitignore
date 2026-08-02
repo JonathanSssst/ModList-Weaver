@@ -33,6 +33,7 @@ dist/
 
 # Release 压缩包（CI 构建产物，不入库）
 ModList-Weaver-Windows-*.zip
+ModList-Weaver-Windows-*-setup.exe
 
 # 测试
 .pytest_cache/

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ModList-Weaver v3.3.2 · Minecraft 双源模组迁移工具</title>
+    <title>ModList-Weaver v3.4.0 · Minecraft 双源模组迁移工具</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -22,7 +22,7 @@
                 </div>
                 <div class="sidebar-brand-text">
                     <div class="sb-title">ModList-Weaver</div>
-                    <div class="sb-sub">模组迁移工具 v3.3.2</div>
+                    <div class="sb-sub">模组迁移工具 v3.4.0</div>
                 </div>
             </div>
 
@@ -867,7 +867,7 @@
                                 </div>
                                 <div class="about-hero-main">
                                     <div class="about-name">ModList-Weaver</div>
-                                    <div class="about-ver">版本 v3.3.2</div>
+                                    <div class="about-ver">版本 v3.4.0</div>
                                     <div class="about-desc">Minecraft 双源（Modrinth + CurseForge）模组迁移工具：扫描旧版本 mods 目录、导出 modlist.json、批量 / 单模组下载。</div>
                                     <div class="about-update-row">
                                         <button class="btn btn-outline btn-sm" id="btnCheckAppUpdate">检查更新</button>
@@ -901,6 +901,23 @@
                                 <div class="cl-item cl-fold" data-open="1">
                                     <div class="cl-head" role="button" title="点击展开/收起">
                                         <span class="cl-ver">
+                                            <a href="https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v3.4.0" target="_blank" rel="noopener">v3.4.0</a>
+                                        </span>
+                                        <span class="cl-date">2026-08</span>
+                                        <span class="cl-fold-hint">▾</span>
+                                    </div>
+                                    <div class="cl-fold-body">
+                                        <div class="cl-title">发布安装包 · 便携版整理为单文件夹</div>
+                                        <ul class="cl-list">
+                                            <li><b>【安装包】</b>新增 Windows 安装版（.setup.exe），双击安装到 %LocalAppData%\ModList-Weaver，自动创建开始菜单 / 桌面快捷方式，无需管理员权限。</li>
+                                            <li><b>【便携版】</b>zip 压缩包改为包含顶层文件夹，解压后得到单一 ModList-Weaver 文件夹，不再需要分别提取 .exe 与 _internal。</li>
+                                            <li><b>【发布】</b>GitHub Release 同时提供便携版与安装版两种分发方式，CI 自动构建并上传。</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">
                                             <a href="https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v3.3.2" target="_blank" rel="noopener">v3.3.2</a>
                                         </span>
                                         <span class="cl-date">2026-08</span>
@@ -919,6 +936,24 @@
                                     <div class="cl-head" role="button" title="点击展开/收起">
                                         <span class="cl-ver">
                                             <a href="https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v3.3.1" target="_blank" rel="noopener">v3.3.1</a>
+                                        </span>
+                                        <span class="cl-date">2026-08</span>
+                                        <span class="cl-fold-hint">▾</span>
+                                    </div>
+                                    <div class="cl-fold-body">
+                                        <div class="cl-title">加载器匹配修正 · 更新日志本地化 · 界面优化</div>
+                                        <ul class="cl-list">
+                                            <li><b>【加载器匹配】</b>修复本地模组检查更新时加载器不对等的问题（Fabric 误匹配 Forge 版本），更新检测与下载均严格按选定加载器过滤。</li>
+                                            <li><b>【更新日志】</b>更新日志改为读取本地 CHANGELOG.md 文档，支持点击版本号跳转到对应 GitHub Release。</li>
+                                            <li><b>【界面优化】</b>移除面包屑左侧汉堡图标（折叠侧边栏仅由侧边栏下方按钮控制），优化模组列表页面高度减少滚动。</li>
+                                            <li><b>【兼容性提醒】</b>一键更新时提示模组版本之间可能存在兼容性问题。</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">
+                                            <a href="https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v3.3.0" target="_blank" rel="noopener">v3.3.0</a>
                                         </span>
                                         <span class="cl-date">2026-08</span>
                                         <span class="cl-fold-hint">▾</span>

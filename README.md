@@ -2,7 +2,7 @@
 
 > Minecraft 双源（Modrinth / CurseForge）模组迁移桌面工具 —— 一键扫描本地 mods，导出模组清单，跨版本/跨加载器批量重下载，自带断点续传、哈希校验、依赖递归与任务队列。
 
-当前版本：**v3.3.2** · 平台：Windows x64（PyInstaller 打包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
+当前版本：**v3.4.0** · 平台：Windows x64（PyInstaller 打包 + Inno Setup 安装包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
 
 ---
 
@@ -25,9 +25,10 @@
 
 ### 方式一：下载 Release 可执行文件（推荐普通用户）
 
-1. 前往 [Releases](https://github.com/JonathanSssst/ModList-Weaver/releases/latest) 下载 `ModList-Weaver-Windows-vX.X.X.zip`
-2. 解压到任意目录
-3. 双击 `ModList-Weaver.exe` 即可启动（首次启动稍慢，会初始化缓存）
+Release 提供两种分发方式，任选其一：
+
+- **安装版（推荐）**：下载 `ModList-Weaver-Windows-vX.X.X-setup.exe`，双击安装到 `%LocalAppData%\ModList-Weaver`，自动创建开始菜单 / 桌面快捷方式，无需解压。
+- **便携版**：下载 `ModList-Weaver-Windows-vX.X.X.zip`，解压后得到一个 `ModList-Weaver` 文件夹，双击其中的 `ModList-Weaver.exe` 即可启动（首次启动稍慢，会初始化缓存）。
 
 > 桌面工具，不弹控制台黑窗；无需安装 Java / Python 环境。
 
@@ -71,6 +72,10 @@ python -m pytest tests -v --tb=short
 pip install pyinstaller pywin32-ctypes
 pyinstaller build.spec
 # 产物位于 dist/ModList-Weaver/
+
+# （可选）编译 Inno Setup 安装包（需已安装 Inno Setup 6）
+# "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=3.4.0 installer.iss
+# 产物位于 output/
 ```
 
 ---
@@ -329,6 +334,12 @@ project.source 字段优先级最高
 ## 版本历史
 
 完整 Changelog 在软件内「更新日志」页动态渲染（数据源：`backend/api.py:CHANGELOG`）。
+
+### v3.4.0（2026-08）· 发布安装包 · 便携版整理为单文件夹
+
+- **安装包**：新增 Windows 安装版（`.setup.exe`），双击安装到 `%LocalAppData%\ModList-Weaver`，自动创建开始菜单 / 桌面快捷方式，无需管理员权限。
+- **便携版**：zip 压缩包改为包含顶层文件夹，解压后得到单一 `ModList-Weaver` 文件夹，不再需要分别提取 `.exe` 与 `_internal`。
+- **发布**：GitHub Release 同时提供便携版与安装版两种分发方式，CI 自动构建并上传。
 
 ### v3.3.2（2026-08）· 操作后页面状态重置 · 更新日志与侧边栏修复
 
