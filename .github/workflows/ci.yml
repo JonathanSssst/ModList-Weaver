@@ -104,59 +104,28 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: 生成 Release 描述（合并本次更新内容）
+      - name: 生成 Release 描述（仅本次版本更新内容）
         shell: bash
         run: |
           python - <<'PY'
-          import json, os, urllib.request
-          from backend.api import CHANGELOG, APP_TITLE, _parse_version
+          from backend.api import CHANGELOG, APP_TITLE
           tag = "${{ github.ref_name }}"
-          out = []
-          try:
-              ver = tag[1:] if tag.startswith("v") else tag
-              # 查询已发布 Release，确定上一个已发布版本（排除当前 tag）
-              last = (0, 0, 0)
-              try:
-                  tok = os.environ.get("GITHUB_TOKEN", "")
-                  repo = os.environ.get("GITHUB_REPOSITORY", "")
-                  req = urllib.request.Request(
-                      "https://api.github.com/repos/%s/releases?per_page=100" % repo,
-                      headers={"Authorization": "Bearer " + tok, "User-Agent": "ci",
-                               "Accept": "application/vnd.github+json"})
-                  with urllib.request.urlopen(req, timeout=20) as r:
-                      rels = json.loads(r.read().decode("utf-8"))
-                  for rel in rels:
-                      t = (rel.get("tag_name") or "").lstrip("v")
-                      if t and t != ver and not rel.get("draft"):
-                          last = max(last, _parse_version(t))
-              except Exception:
-                  last = (0, 0, 0)
-              # 收集「上一个已发布版本之后」到当前 tag 之间所有版本的 changelog
-              entries = [c for c in CHANGELOG
-                         if _parse_version(c.get("version", "0")) > last
-                         and _parse_version(c.get("version", "0")) <= _parse_version(ver)]
-              if not entries:
-                  entries = [next((c for c in CHANGELOG if c["version"] == ver), None)]
-              out.append(f"## {APP_TITLE} {tag}")
+          ver = tag[1:] if tag.startswith("v") else tag
+          entry = next((c for c in CHANGELOG if c.get("version") == ver), None)
+          out = [f"## {APP_TITLE} {tag}", ""]
+          if entry:
+              if entry.get("date"):
+                  out.append(f"**发布时间**：{entry['date']}")
+              if entry.get("title"):
+                  out.append(f"**主题**：{entry['title']}")
               out.append("")
-              if entries and entries[0]:
-                  for i, e in enumerate(entries):
-                      if e.get("date"):
-                          out.append(f"**发布时间**：{e['date']}")
-                      if e.get("title"):
-                          out.append(f"**主题**：{e['title']}")
-                      out.append("")
-                      out.append(f"### v{e['version']} 更新内容")
-                      out.append("")
-                      out.extend(f"- {item}" for item in (e.get("items") or []))
-                      if i < len(entries) - 1:
-                          out.append("")
-              else:
-                  out.append("### 本次更新")
-                  out.append("")
-                  out.append("- 未找到对应版本的软件内更新日志，请查看提交记录。")
-          except Exception:
-              out = [f"## {APP_TITLE} {tag}", "", "（未能生成本次更新说明，请查看提交记录。）"]
+              out.append(f"### v{entry['version']} 更新内容")
+              out.append("")
+              out.extend(f"- {item}" for item in (entry.get("items") or []))
+          else:
+              out.append("### 本次更新")
+              out.append("")
+              out.append("- 未找到对应版本的软件内更新日志，请查看提交记录。")
           out.extend([
               "", "---", "",
               "### 自动构建产物",
@@ -183,7 +152,6 @@ jobs:
             ${{ env.SETUP_NAME }}
           fail_on_unmatched_files: true
           body_path: release_body.md
-          generate_release_notes: true
           overwrite_files: true
           make_latest: true
         env:
