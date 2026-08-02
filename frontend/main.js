@@ -303,7 +303,7 @@ async function loadMcVersions() {
 
 // 全局事件委托：折叠按钮 / 导航 / 队列列表 / 模组列表 / 搜索结果
 document.addEventListener("click", (e) => {
-    const t = e.target.closest("#sidebarToggle, #sidebarToggle2");
+    const t = e.target.closest("#sidebarToggle");
     if (t) {
         e.preventDefault();
         toggleSidebar();
@@ -1300,7 +1300,8 @@ async function downloadInstalledUpdates() {
         };
     });
     if (!updates.length) { toast("没有可更新的模组", "err"); return; }
-    if (!confirm(`确认更新 ${updates.length} 个模组？\n将下载最新适配版本并移除旧文件。`)) return;
+    const warnMsg = "⚠ 注意：一键更新将同时更新多个模组，目前无法检测模组之间的版本兼容性。\n请确保更新后模组列表仍能正常启动游戏，如有冲突请手动回退。";
+    if (!confirm(`确认更新 ${updates.length} 个模组？\n将下载最新适配版本并移除旧文件。\n\n${warnMsg}`)) return;
     const btn = document.getElementById("btnManUpdate");
     btn.disabled = true;
     try {
@@ -2166,36 +2167,54 @@ try {
         }
         // 浏览器标题
         if (v.display) document.title = `${v.display} · Minecraft 双源模组迁移工具`;
-        // 更新日志（已并入「关于」页）：后端返回 changelog 则渲染，最新版本默认展开、历史版本折叠可点击展开
-        const clRoot = document.getElementById("changelogRoot");
-        if (clRoot) {
-            if (Array.isArray(v.changelog) && v.changelog.length) {
-                clRoot.innerHTML = v.changelog.map((c, idx) => {
-                    const open = idx === 0;
-                    return `
-                    <div class="cl-item cl-fold" data-open="${open ? 1 : 0}">
-                        <div class="cl-head" role="button" title="点击展开/收起">
-                            <span class="cl-ver">v${c.version || ''}</span>
-                            <span class="cl-fold-hint">${open ? '▾' : '▸'}</span>
-                        </div>
-                        ${c.date ? `<div class="cl-date">${c.date}${open ? ' · 最新正式版' : ''}</div>` : ''}
-                        <div class="cl-fold-body">
-                            ${c.title ? `<div class="cl-title">${c.title}</div>` : ''}
-                            <ul class="cl-list">${(c.items || []).map(i => `<li>${i}</li>`).join('')}</ul>
-                        </div>
-                    </div>`;
-                }).join('');
-            }
-            clRoot.addEventListener("click", (e) => {
-                const head = e.target.closest(".cl-head");
-                if (!head) return;
-                const item = head.closest(".cl-item");
-                if (!item) return;
-                const next = item.getAttribute("data-open") === "1" ? "0" : "1";
-                item.setAttribute("data-open", next);
-                const hint = head.querySelector(".cl-fold-hint");
-                if (hint) hint.textContent = next === "1" ? "▾" : "▸";
-            });
-        }
+        // 更新日志（V3.3.1：读取本地 CHANGELOG.md，支持点击版本号跳转 GitHub Release）
+(async function initChangelog() {
+    const clRoot = document.getElementById("changelogRoot");
+    if (!clRoot) return;
+    try {
+        const resp = await fetch(`${API}/changelog`);
+        const data = await resp.json();
+        const md = data.content || "";
+        if (!md.trim()) return;
+        const sections = md.split(/^##\s+/m).filter(s => s.trim());
+        clRoot.innerHTML = sections.map((sec, idx) => {
+            const lines = sec.trim().split("\n");
+            const titleLine = lines[0];
+            const verMatch = titleLine.match(/^v?(\d+\.\d+\.\d+)/);
+            const version = verMatch ? verMatch[1] : "";
+            const releaseUrl = version ? `https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v${version}` : "";
+            const rest = lines.slice(1).join("\n").trim();
+            const open = idx === 0;
+            return `
+            <div class="cl-item cl-fold" data-open="${open ? 1 : 0}">
+                <div class="cl-head" role="button" title="点击展开/收起">
+                    <span class="cl-ver">${version ? `<a href="${releaseUrl}" target="_blank" rel="noopener">v${version}</a>` : titleLine}</span>
+                    <span class="cl-fold-hint">${open ? '▾' : '▸'}</span>
+                </div>
+                ${rest ? `<div class="cl-fold-body">${renderMarkdown(rest)}</div>` : ''}
+            </div>`;
+        }).join("");
+        clRoot.addEventListener("click", (e) => {
+            const head = e.target.closest(".cl-head");
+            if (!head) return;
+            const item = head.closest(".cl-item");
+            if (!item) return;
+            const next = item.getAttribute("data-open") === "1" ? "0" : "1";
+            item.setAttribute("data-open", next);
+            const hint = head.querySelector(".cl-fold-hint");
+            if (hint) hint.textContent = next === "1" ? "▾" : "▸";
+        });
+    } catch (_) {}
+})();
+
+function renderMarkdown(text) {
+    return text
+        .replace(/^###\s+(.+)$/gm, "<h4>$1</h4>")
+        .replace(/^##\s+(.+)$/gm, "<h3>$1</h3>")
+        .replace(/^- (.+)$/gm, "<li>$1</li>")
+        .replace(/\n\n/g, "</p><p>")
+        .replace(/^(?!<[hli])/gm, "<p>")
+        .replace(/(?<!<\/li>)\n/g, "<br>");
+}
     } catch (_) {}
 })();

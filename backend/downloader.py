@@ -569,9 +569,11 @@ def _pick_best_version(versions, mc_version, loader):
 
     :return: (version, reason) 找不到时 version 为 None，reason 说明原因
     """
+    loader_lower = (loader or "").lower()
     for v in versions or []:
         if mc_version in (v.get("game_versions") or []):
-            if loader in (v.get("loaders") or []):
+            v_loaders = [l.lower() for l in (v.get("loaders") or [])]
+            if loader_lower in v_loaders:
                 return v, None
     versions = versions or []
     if not versions:

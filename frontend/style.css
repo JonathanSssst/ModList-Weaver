@@ -749,7 +749,7 @@ select.input {
 /* 列表与空状态 */
 /* ================================================================ */
 .mod-list, .search-result {
-    max-height: 360px;
+    max-height: 280px;
     overflow-y: auto;
 }
 

@@ -1,7 +1,8 @@
 """FastAPI REST 接口定义
 
 接口列表：
-  GET  /api/version              当前软件版本 + 版本历史（Changelog）
+GET  /api/version              当前软件版本 + 版本历史（Changelog）
+   GET  /api/changelog           读取本地 CHANGELOG.md 文档（V3.3.1）
   POST /api/scan_mods            扫描 mods 目录，返回模组列表 + project_id 反查结果
   POST /api/check_updates        检测已识别模组是否有新版本（V3.1）
   POST /api/export_json          生成 modlist 并保存本地
@@ -57,149 +58,33 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.3.0"
+CURRENT_VERSION = "3.3.1"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
     {
+        "version": "3.3.1",
+        "date": "2026-08",
+        "title": "加载器匹配修正 · 更新日志本地化 · 界面优化",
+        "items": [
+            "【加载器匹配】修复本地模组检查更新时加载器不对等的问题（Fabric 误匹配 Forge 版本），更新检测与下载均严格按选定加载器过滤。",
+            "【更新日志】更新日志改为读取本地 CHANGELOG.md 文档，支持点击版本号跳转到对应 GitHub Release。",
+            "【界面优化】移除面包屑左侧汉堡图标（折叠侧边栏仅由侧边栏下方按钮控制），优化模组列表页面高度减少滚动。",
+            "【兼容性提醒】一键更新时提示模组版本之间可能存在兼容性问题。",
+        ],
+    },
+    {
         "version": "3.3.0",
         "date": "2026-08",
         "title": "一键更新已安装模组 · 本地 mods 目录管理",
         "items": [
             "【一键更新】新增「本地模组」页：扫描本地 mods 目录后一键检查更新，批量下载最新适配版本并自动移除旧文件，原禁用模组更新后保持禁用状态。",
-            "【本地目录管理】支持启用 / 禁用（.disabled 后缀）/ 删除 / 打开源页面 / 查看详情，未识别模组标灰展示，可直接进入模组列表页查看详情。",
+            "【本地目录管理】支持启用 / 禁用（.disabled 后缀）/ 删除 / 打开源页面 / 查看详情，未识别模组标灰展示。",
             "【更新任务】任务中心新增「模组更新」任务类型，纳入队列 / 进度 / 结算 / 断点恢复体系，失败与缺失可在结算页重试。",
-            "【工程化】scan_mods 支持 include_disabled 参数；/api/manage_scan、/api/manage_mod、/api/download_updates 三个新接口。",
+            "【工程化】scan_mods 支持 include_disabled 参数；新增 /api/manage_scan、/api/manage_mod、/api/download_updates 三个接口。",
             "【测试】新增 tests/test_manage_v33.py（本地管理接口 + 一键更新），pytest 全绿。",
-        ],
-    },
-    {
-        "version": "3.2.1",
-        "date": "2026-08",
-        "title": "更新应用图标样式",
-        "items": [
-            "【应用图标】重绘应用图标（app.png / app.ico），可执行文件、窗口与桌面图标同步更新。",
-        ],
-    },
-    {
-        "version": "3.2.0",
-        "date": "2026-08",
-        "title": "打开源页面 · 存储清理 · 应用图标 · 下载完成通知 · 移除作者头像",
-        "items": [
-            "【打开源页面】模组列表 / 模组目录 / 详情页新增「源页面」按钮，一键跳转 Modrinth / CurseForge 项目主页。",
-            "【存储与清理】设置页新增「存储与清理」：展示日志 / 导入临时文件 / 任务历史占用，支持一键清理。",
-            "【应用图标】新增应用图标（assets/app.ico），可执行文件与窗口图标统一。",
-            "【下载完成通知】全部任务结束时 toast + 提示音 + 系统通知提醒，并汇总成功 / 失败数量。",
-            "「关于」页移除作者头像（head.png），仅保留作者名与 GitHub 链接。",
-        ],
-    },
-    {
-        "version": "3.1.0",
-        "date": "2026-08",
-        "title": "模组更新检测 · 软件自动更新 · 断点恢复 · 拖拽导入",
-        "items": [
-            "【模组更新检测】步骤 2 新增「检查更新」按钮：按模组所属源（Modrinth / CurseForge）拉取最新适配版本，与已安装版本比对，命中更新在列表标黄徽章显示最新版本号，并汇总更新数量。",
-            "【软件自动更新检查】启动时静默检查 GitHub Release，发现新版本在页面顶部弹出更新横幅，支持一键跳转下载或忽略本次版本（「关于」页亦可手动检查）。",
-            "【断点恢复】进程异常退出后，重启自动恢复未完成任务（cache/temp/active.json），按原参数重新排队执行。",
-            "【拖拽导入】桌面窗口支持将 .json 模组清单直接拖入任意区域完成导入，自动跳到批量下载第一步；非桌面环境降级为浏览器原生拖拽读取。",
-            "【工程化】移除根目录冗余 static/ 目录（静态资源统一由 frontend/ 提供），前端资产打包与路径不受影响。",
-            "【测试】新增 tests/test_resume_and_updates.py（断点恢复、版本比较、更新检测、清单导入），pytest 35/35 通过。",
-        ],
-    },
-    {
-        "version": "3.0.1",
-        "date": "2026-08",
-        "title": "更新日志并入关于页 · 作者头像修复",
-        "items": [
-            "「更新日志」并入「关于」页面：关于页直接展示完整版本历史，最新版本默认展开，历史版本自动折叠，可点击版本号展开/收起。",
-            "侧边栏移除独立「更新日志」入口，导航更精简。",
-            "修复关于页作者头像无法显示的问题（静态资源路径指向错误，/src → /static/src）。",
-        ],
-    },
-    {
-        "version": "3.0.0",
-        "date": "2026-08",
-        "title": "断点续传 + CurseForge 双源 + 自动化 CI/CD",
-        "items": [
-            "【断点续传】下载中断后保留 .part 临时文件，HTTP Range 请求从断点续传，避免重复下载浪费带宽（Modrinth / CurseForge 双客户端一致实现）。",
-            "【CurseForge 双源支持】新增独立 CurseForge 客户端：murmur2 指纹匹配、项目搜索、版本列表、依赖递归、文件下载、服务端 429 速率节流自适应。",
-            "【多源自动路由】settings.source = auto / modrinth / curseforge；扫描阶段 Modrinth sha512 未命中时自动 fallback CurseForge murmur2，识别率显著提升。",
-            "【多算法哈希校验】优先级自适应：sha512 > sha1 > murmur2，按源 API 返回的可用字段选择最可靠的校验方案。",
-            "【pytest 单测 29/29 PASS】新增 tests/ 三套用例：scanner 哈希与 jar 解析、downloader 版本选择/TaskGate/限速器/哈希策略、CurseForge murmur2 + Settings 持久化边界。",
-            "【GitHub Actions CI/CD】push/PR：2 OS × 3 Python 跑单测矩阵；main/master/v* tag：PyInstaller 自动打 Windows 包；打 v* 正式 tag：自动上传 .zip 到 GitHub Release 并生成发布说明。",
-            "【工程化】build.spec 补 backend.*、hashlib 等 hiddenimports；requirements.txt 加入 pytest 开发依赖；.gitignore 补 build/ dist/ .pytest_cache/。",
-        ],
-    },
-    {
-        "version": "2.5",
-        "date": "2026-07",
-        "title": "交互细节与 UI 稳定性",
-        "items": [
-            "修复批量下载勾选模组后「下一步：目标配置」按钮无响应的问题。",
-            "修复任务 / 历史列表删除按钮缺少图标的问题（并补上「继续」按钮图标）。",
-            "结算页信息卡片重新排版：「任务」「保存目录」「清单文件」独占整行，长文本不再挤压错位。",
-            "进入结算页新增淡入上滑过渡动画。",
-        ],
-    },
-    {
-        "version": "2.4",
-        "date": "2026-06",
-        "title": "设置页 · 主题 · 四步下载向导",
-        "items": [
-            "新增「设置」页：最大并发下载数（默认 3）与全局网速限制，可热更新即时生效。",
-            "支持明暗主题，顶栏一键切换，偏好持久化。",
-            "批量下载改为四步向导：新增清单预览与勾选步骤，可按需选择下载模组。",
-            "任务详情改为双进度条：总任务进度 + 当前文件进度。",
-            "结算页合并失败 / 缺失为统一列表，按类型着色并标注原因，支持「查找类似」。",
-            "模组详情版本列表支持折叠展开更新日志。",
-            "精简各处说明性文字，界面更聚焦。",
-        ],
-    },
-    {
-        "version": "2.2",
-        "date": "2026-05",
-        "title": "任务持久化 · 结算页 · 更新日志页",
-        "items": [
-            "「批量下载」改为三步向导，「模组列表」去除步骤编号。",
-            "所有版本输入改为下拉选择（读取 Minecraft 官方版本列表）。",
-            "任务中心拆分为「进行中 / 已完成」：终态任务持久化本机，重启不丢失。",
-            "日志不再内嵌刷新，改为「查看日志 / 导出日志」，日志归档于 cache/logs。",
-            "新增任务结算页：查看失败 / 缺失明细、重试、打开源 / 目标目录。",
-            "新增独立「更新日志」页；「关于」改为独立分类并展示作者头像。",
-            "修复任务中心删除按钮显示异常、面包屑根节点固定不变等问题。",
-        ],
-    },
-    {
-        "version": "2.1",
-        "date": "2026-05",
-        "title": "模组列表 · 单模组下载 · 关于页",
-        "items": [
-            "合并「搜索 & 单模组」与「模组详情」为「模组列表」页，分页展示，支持筛选与搜索。",
-            "模组详情页新增一键下载（含 required 前置依赖）。",
-            "新增「关于」页面，展示本软件更新日志与作者信息。",
-        ],
-    },
-    {
-        "version": "2.0",
-        "date": "2026-04",
-        "title": "下载队列 · 任务中心 · 扫描向导",
-        "items": [
-            "新增下载队列：排队执行，支持暂停、继续、停止与删除。",
-            "新增模组详情页（图标、版本、作者、简介）。",
-            "扫描导出改为三步向导，支持勾选自定义导出，未识别模组标灰置顶。",
-            "任务中心重新排版，长文件名友好展示。",
-        ],
-    },
-    {
-        "version": "1.0",
-        "date": "2026-04",
-        "title": "MVP 首发：扫描 → 导出 → 批量下载",
-        "items": [
-            "扫描 mods 目录并通过文件哈希反查 Modrinth 项目。",
-            "导出 modlist.json。",
-            "批量 / 单模组下载（自动解析 required 前置依赖）。",
         ],
     },
 ]
@@ -300,6 +185,19 @@ async def api_version():
         "changelog": CHANGELOG,
         "release_download": f"https://github.com/JonathanSssst/{APP_TITLE}/releases/tag/v{CURRENT_VERSION}",
     }
+
+
+@app.get("/api/changelog")
+async def api_changelog():
+    """读取本地 CHANGELOG.md 文档内容（V3.3.1）"""
+    changelog_path = Path(__file__).resolve().parent.parent / "CHANGELOG.md"
+    if changelog_path.exists():
+        try:
+            content = changelog_path.read_text(encoding="utf-8")
+            return {"content": content}
+        except OSError:
+            return {"content": ""}
+    return {"content": ""}
 
 
 # ==================== 软件更新检查 / 清单导入（V3.1） ====================
@@ -676,6 +574,7 @@ async def api_check_updates(req: CheckUpdatesRequest):
     updates = []
     errors = []
     checked = 0
+    loader_lower = (req.loader or "").lower()
     for m in req.mods or []:
         pid = (m or {}).get("project_id")
         if not pid:
@@ -699,6 +598,9 @@ async def api_check_updates(req: CheckUpdatesRequest):
             continue
         latest_vid = str(best.get("id") or best.get("version_id") or "")
         if installed_vid and latest_vid and str(installed_vid) != latest_vid:
+            best_loaders = [l.lower() for l in (best.get("loaders") or [])]
+            if req.loader and loader_lower not in best_loaders:
+                continue
             pf = _pick_primary_from_version(best)
             updates.append({
                 "project_id": pid,
