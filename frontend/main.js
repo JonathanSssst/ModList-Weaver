@@ -149,8 +149,10 @@ applyTheme(themePref);
 // 页面切换（面包屑同步）
 // ================================================================
 const PAGE_TITLES = {
-    pageA: "扫描 & 导出清单",
-    pageB: "批量下载模组",
+    pageA: "导出",
+    pageB: "导入",
+    pageI: "迁移",
+    pageJ: "自定义模组包",
     pageC: "模组列表",
     pageE: "本地模组",
     pageD: "任务中心",
@@ -162,6 +164,8 @@ const PAGE_TITLES = {
 const PAGE_GROUP = {
     pageA: "工作流",
     pageB: "工作流",
+    pageI: "工作流",
+    pageJ: "工作流",
     pageC: "工作流",
     pageE: "工作流",
     pageD: "运维",
@@ -178,6 +182,7 @@ const state = {
     bpItems: [],       // 批量预览清单（勾选状态）
     detailPid: null,
     catDetail: false,
+    detailBackPage: "pageC",   // 详情页返回来源（V3.5）
     selectedTaskId: null,
     settleTaskId: null,   // 结算页当前任务（已完成历史）
     logModalTid: null,    // 日志弹窗当前任务
@@ -186,6 +191,8 @@ const state = {
     wasDownloading: false, // 是否有任务进行中（完成通知判定，V3.2）
     manMods: [],          // 本地模组管理（页面 E）：扫描结果（V3.3）
     manUpdateMap: {},     // 页面 E：project_id -> 更新信息（V3.3）
+    migMods: [],          // 模组迁移（页面 I）：扫描结果（V3.5）
+    customMods: [],       // 自定义模组包（页面 J）：清单（V3.5）
 };
 
 // 模组列表页（页面 C）：搜索状态
@@ -197,6 +204,7 @@ const catalogState = {
     page: 1,
     total: 0,
     loaded: false,
+    lastHits: [], // V3.5：当前页命中结果（详情页反依赖上下文）
 };
 
 // 下载偏好（详情页下载表单记忆，localStorage 持久化）
@@ -247,6 +255,17 @@ function switchPage(pageId) {
         const ldr = document.getElementById("manLoader");
         if (mc && !mc.value) mc.value = pref.mc || "";
         if (ldr) ldr.value = pref.loader || "fabric";
+    }
+    if (pageId === "pageI") {
+        // 预填迁移目标（V3.5）
+        const mc = document.getElementById("migMc");
+        const ldr = document.getElementById("migLoader");
+        if (mc && !mc.value) mc.value = pref.mc || "";
+        if (ldr) ldr.value = pref.loader || "fabric";
+        updateMigCount();
+    }
+    if (pageId === "pageJ") {
+        renderCustomList();
     }
     if (pageId === "pageD") {
         showQueueView(state.settleTaskId ? "settle" : "list");
@@ -321,6 +340,24 @@ function resetPage(pageId) {
             const manBtn = document.getElementById("btnManUpdate");
             if (manBtn) manBtn.disabled = true;
             renderManList();
+            break;
+        case "pageI":
+            state.migMods = [];
+            const migFolder = document.getElementById("migFolder");
+            if (migFolder) migFolder.value = "";
+            const migMc = document.getElementById("migMc");
+            if (migMc) migMc.value = "";
+            const migSave = document.getElementById("migSaveDir");
+            if (migSave) migSave.value = "";
+            renderMigList();
+            updateMigCount();
+            break;
+        case "pageJ":
+            state.customMods = [];
+            const customPath = document.getElementById("customPath");
+            if (customPath) customPath.value = "";
+            saveCustomMods();
+            renderCustomList();
             break;
     }
 }
@@ -880,6 +917,7 @@ async function searchCatalog(page) {
         });
         catalogState.total = data.total_hits || 0;
         catalogState.loaded = true;
+        catalogState.lastHits = data.hits || [];
         renderCatalog(data.hits || []);
         setStatus("就绪");
     } catch (e) {
@@ -961,16 +999,22 @@ document.getElementById("modCatalog").addEventListener("click", (e) => {
 // ================================================================
 // 模组详情（页面 C 子视图）
 // ================================================================
-function openDetail(pid) {
+function openDetail(pid, fromPage) {
     state.catDetail = true;
     state.detailPid = pid;
+    state.detailBackPage = fromPage || state.currentPage || "pageC"; // V3.5：返回来源跟踪
     switchPage("pageC");
     loadDetail(pid);
 }
 
 document.getElementById("btnBackCatalog").addEventListener("click", () => {
     state.catDetail = false;
-    showCView("list");
+    const from = state.detailBackPage || "pageC";
+    if (from === "pageC") {
+        showCView("list");
+        return;
+    }
+    switchPage(from);
 });
 
 async function loadDetail(pid) {
@@ -1007,6 +1051,7 @@ function renderDetail(box, d) {
         <div class="author-item" title="${escapeHtml(a.role || "")}">
             <img class="author-avatar" src="${escapeHtml(a.avatar_url || "")}" onerror="this.style.display='none'" />
             <span class="author-name">${escapeHtml(a.name || "?")}</span>
+            ${a.role_label ? `<span class="author-role author-role-${escapeHtml((a.role_label === "原开发者" ? "creator" : a.role_label === "维护者" ? "maintainer" : "contributor"))}">${escapeHtml(a.role_label)}</span>` : ""}
         </div>`).join("") || `<span class="text-mute">暂无</span>`;
 
     const rvs = (d.versions || []).slice(0, 10).map(v => {
@@ -1028,6 +1073,55 @@ function renderDetail(box, d) {
 
     const ldOpts = Object.entries(LOADER_LABELS).map(([v, label]) =>
         `<option value="${v}" ${pref.loader === v ? "selected" : ""}>${label}</option>`).join("");
+
+    // V3.5：前置依赖（最新版本 dependencies）
+    const latest = (d.versions || [])[0];
+    const depGroups = { required: [], optional: [], incompatible: [], embedded: [] };
+    const DEP_LABELS = { required: "必需依赖", optional: "可选依赖", incompatible: "不兼容", embedded: "内置依赖" };
+    for (const dep of (latest && latest.dependencies) || []) {
+        if (!dep || dep.project_id === undefined || dep.project_id === null) continue;
+        const t = dep.dependency_type in DEP_LABELS ? dep.dependency_type : "required";
+        const target = dep.project_id ? String(dep.project_id) : dep.version_id ? String(dep.version_id) : null;
+        if (!target) continue;
+        depGroups[t].push(`<button class="dep-chip dep-chip-${escapeHtml(t)}" data-pid="${escapeHtml(target)}" data-dsrc="${escapeHtml(d.source || "auto")}" title="点击查看详情">
+            ${escapeHtml(dep.project_id || dep.version_id)}<span class="dep-type">${escapeHtml(DEP_LABELS[t])}</span>
+        </button>`);
+    }
+    const depHtml = Object.keys(depGroups).map(t =>
+        depGroups[t].length
+            ? `<div class="dep-group"><span class="dep-group-label">${DEP_LABELS[t]}</span>${depGroups[t].join("")}</div>`
+            : ""
+    ).join("");
+    const depsCard = `
+        <div class="card">
+            <div class="card-head">
+                <div class="ch-title"><span class="ch-step">⊘</span> 前置依赖</div>
+                <span class="ch-hint">最新版本 ${latest ? escapeHtml(latest.version_number || latest.name || "") : "—"} 的依赖</span>
+            </div>
+            <div class="card-body">
+                ${depHtml || `<span class="text-mute">该模组没有已声明的依赖。</span>`}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div class="ch-title"><span class="ch-step">⇱</span> 反依赖（后置）</div>
+                <span class="ch-hint">在当前清单中查找依赖该模组的项目</span>
+            </div>
+            <div class="card-body">
+                <p class="field-hint">分析范围取自来源页面（${escapeHtml(PAGE_TITLES[state.detailBackPage] || "当前页面")}）的模组清单，逐项查询最近版本依赖；清单较大时可能耗时较长。</p>
+                <div class="form-actions">
+                    <button class="btn btn-outline" id="btnRevDeps">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        分析反依赖
+                    </button>
+                </div>
+                <div id="revResult"></div>
+            </div>
+        </div>`;
 
     box.innerHTML = `
         <div class="card">
@@ -1067,6 +1161,8 @@ function renderDetail(box, d) {
                 <div class="rv-list">${rvs}</div>
             </div>
         </div>
+
+        ${depsCard}
 
         <div class="card">
             <div class="card-head">
@@ -1131,6 +1227,18 @@ document.getElementById("modDetail").addEventListener("click", async (e) => {
         if (lastDetail) openSourcePage(lastDetail.project_id, lastDetail.source);
         return;
     }
+    // V3.5：前置依赖跳转
+    const dep = e.target.closest(".dep-chip");
+    if (dep) {
+        openDetail(dep.dataset.pid, state.detailBackPage);
+        return;
+    }
+    // V3.5：反依赖分析
+    const revBtn = e.target.closest("#btnRevDeps");
+    if (revBtn) {
+        runReverseDeps();
+        return;
+    }
     const dl = e.target.closest("#btnDlDownload");
     if (dl) {
         const pid = document.getElementById("dlPid").value.trim();
@@ -1145,11 +1253,69 @@ document.getElementById("modDetail").addEventListener("click", async (e) => {
                 project_id: pid, mc_version: mc, loader, save_dir: saveDir,
             });
             toast(data.queued ? "已加入下载队列排队" : "单模组下载已启动", "ok");
-            resetPage("pageC");
+            resetPage(state.detailBackPage || "pageC");
             switchPage("pageD");
         } catch (err) {
             toast("启动失败：" + err.message, "err");
         }
+    }
+});
+
+// V3.5：详情页反依赖分析 —— 上下文取自来源页面（导出 / 导入 / 迁移 / 自定义 / 列表 / 本地）
+function detailContextMods() {
+    const from = state.detailBackPage || "pageC";
+    const mods = {
+        pageA: state.scannedMods.filter(m => m.project_id),
+        pageB: state.bpItems.filter(m => m.project_id),
+        pageC: catalogState.lastHits,
+        pageE: state.manMods.filter(m => m.project_id),
+        pageI: state.migMods.filter(m => m.project_id),
+        pageJ: state.customMods,
+    }[from] || [];
+    return mods.map(m => ({ project_id: m.project_id, name: m.name || m.title || m.project_id, source: m.source || "modrinth" }));
+}
+
+async function runReverseDeps() {
+    const pid = state.detailPid;
+    const mods = detailContextMods();
+    if (!mods.length) {
+        document.getElementById("revResult").innerHTML =
+            `<div class="rev-empty">当前来源页面没有可分析的模组清单，请先在来源页扫描或添加模组。</div>`;
+        return;
+    }
+    const box = document.getElementById("revResult");
+    box.innerHTML = `<div class="rev-empty rev-busy">正在分析 ${mods.length} 个项目，请稍候…</div>`;
+    const btn = document.getElementById("btnRevDeps");
+    if (btn) btn.disabled = true;
+    try {
+        const data = await postJSON(`${API}/reverse_deps`, { project_id: pid, mods });
+        const results = data.results || [];
+        if (!results.length) {
+            box.innerHTML = `<div class="rev-empty">未发现依赖该模组的项目（已检查 ${data.checked || 0} 个${data.errors ? "，失败 " + data.errors : ""}）。</div>`;
+            return;
+        }
+        const items = results.map(r => `
+            <div class="rev-item">
+                <span class="chip chip-loader">${escapeHtml(r.dependency_type || "required")}</span>
+                <button class="rev-name" data-pid="${escapeHtml(r.project_id)}">${escapeHtml(r.name || r.project_id)}</button>
+                <span class="rev-src text-mute">${escapeHtml(r.source)}</span>
+            </div>`).join("");
+        box.innerHTML = `
+            <div class="rev-head">共 ${results.length} 个反依赖（已检查 ${data.checked || 0} 个）</div>
+            <div class="rev-list">${items}</div>`;
+    } catch (err) {
+        box.innerHTML = `<div class="rev-empty">分析失败：${escapeHtml(err.message)}</div>`;
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+// 反依赖结果跳转（事件委托）
+document.getElementById("modDetail").addEventListener("click", (e) => {
+    const rev = e.target.closest(".rev-name");
+    if (rev) {
+        e.stopPropagation();
+        openDetail(rev.dataset.pid, state.detailBackPage);
     }
 });
 
@@ -1431,12 +1597,14 @@ function qbtn(action, tid, extraCls) {
 function taskTitle(t) {
     if (t.kind === "batch") return "批量下载";
     if (t.kind === "update") return "模组更新" + (t.mc_version ? ` ${t.mc_version}/${t.loader}` : "");
+    if (t.kind === "migrate") return "模组迁移" + (t.mc_version ? ` ${t.mc_version}/${t.loader}` : "");
     return "单模组下载" + (t.mc_version ? ` ${t.mc_version}/${t.loader}` : "");
 }
 
 function taskKindLabel(kind) {
     if (kind === "batch") return "批量";
     if (kind === "update") return "更新";
+    if (kind === "migrate") return "迁移";
     return "单个";
 }
 
@@ -2121,6 +2289,354 @@ document.getElementById("btnCheckAppUpdate").addEventListener("click", async () 
 });
 
 // ================================================================
+// 页面 I：模组迁移（V3.5）——扫描源目录 → 勾选 → 直接下载到新目录
+// ================================================================
+document.getElementById("btnBrowseMig").addEventListener("click", async () => {
+    const data = await getJSON(`${API}/pick_folder?title=选择源 mods 目录`);
+    if (data.folder) document.getElementById("migFolder").value = data.folder;
+});
+
+document.getElementById("btnMigScan").addEventListener("click", scanMigMods);
+
+async function scanMigMods() {
+    const folder = document.getElementById("migFolder").value.trim();
+    if (!folder) { toast("请先选择源 mods 目录", "err"); return; }
+    const btn = document.getElementById("btnMigScan");
+    btn.disabled = true;
+    setStatus("扫描中…", "busy");
+    try {
+        const data = await postJSON(`${API}/scan_mods`, { folder });
+        state.migMods = (data.mods || []).map((m, i) => Object.assign(m, { _idx: i, selected: false }));
+        renderMigList();
+        updateMigCount();
+        setStatus("就绪");
+        toast(`扫描完成：${data.matched}/${data.total} 已识别`, "ok");
+    } catch (e) {
+        setStatus("就绪");
+        toast("扫描失败：" + e.message, "err");
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function renderMigList() {
+    const box = document.getElementById("migList");
+    const mods = state.migMods;
+    if (!mods.length) {
+        box.innerHTML = `
+            <div class="empty-state compact">
+                <div class="empty-state-title">暂无扫描结果</div>
+                <div class="empty-state-desc">请先选择源目录并点击「扫描源目录」。</div>
+            </div>`;
+        return;
+    }
+    const list = [...mods].sort((a, b) => (a.matched ? 1 : 0) - (b.matched ? 1 : 0));
+    box.innerHTML = list.map(m => {
+        const cls = m.matched ? "" : "unmatched";
+        const badge = m.matched
+            ? `<span class="m-badge ok">已识别</span>`
+            : `<span class="m-badge no">未识别</span>`;
+        const src = m.matched
+            ? `<span class="chip chip-loader">${escapeHtml(m.source || "modrinth")}</span>` : "";
+        const name = (m.metadata && (m.metadata.name || m.metadata.mod_id)) || m.filename;
+        const checked = m.selected ? "checked" : "";
+        const disabled = m.matched ? "" : "disabled";
+        const clickable = m.matched ? ` data-pid="${escapeHtml(m.project_id)}"` : "";
+        return `<div class="mod-item ${cls}"${clickable}>
+            <input type="checkbox" class="m-check" ${checked} ${disabled} data-idx="${m._idx}" />
+            <span class="m-name" title="${escapeHtml(m.filename)}">${escapeHtml(name)}</span>
+            ${m.project_id ? `<span class="m-pid">${escapeHtml(m.project_id)}</span>` : `<span class="m-pid">本地模组</span>`}
+            <span class="m-pid">${escapeHtml((m.metadata && m.metadata.loader) || "?")}</span>
+            ${src}
+            ${badge}
+            <span class="m-size">${formatBytes(m.size)}</span>
+            <span class="m-open"><span class="m-open-chev">›</span></span>
+        </div>`;
+    }).join("");
+    box.querySelectorAll(".m-check").forEach(cb => {
+        cb.addEventListener("change", () => {
+            state.migMods[Number(cb.dataset.idx)].selected = cb.checked;
+            updateMigCount();
+        });
+    });
+    updateMigCount();
+}
+
+function updateMigCount() {
+    const mods = state.migMods;
+    const matched = mods.filter(m => m.matched);
+    const selected = matched.filter(m => m.selected);
+    const totalEl = document.getElementById("migTotal");
+    const selEl = document.getElementById("migSelected");
+    if (totalEl) totalEl.textContent = matched.length;
+    if (selEl) selEl.textContent = selected.length;
+    const sc = document.getElementById("migSelCount");
+    if (sc) sc.textContent = selected.length;
+    const st = document.getElementById("migSelTotal");
+    if (st) st.textContent = matched.length;
+}
+
+document.getElementById("btnMigAll").addEventListener("click", () => {
+    state.migMods.forEach(m => { if (m.matched) m.selected = true; });
+    renderMigList();
+});
+document.getElementById("btnMigNone").addEventListener("click", () => {
+    state.migMods.forEach(m => { m.selected = false; });
+    renderMigList();
+});
+document.getElementById("btnMigInvert").addEventListener("click", () => {
+    state.migMods.forEach(m => { if (m.matched) m.selected = !m.selected; });
+    renderMigList();
+});
+
+document.getElementById("migList").addEventListener("click", (e) => {
+    if (e.target.closest(".m-check")) return;
+    const item = e.target.closest(".mod-item");
+    if (!item) return;
+    const pid = item.dataset.pid;
+    if (pid) openDetail(pid, "pageI");
+    else toast("未识别模组无法查看详情", "err");
+});
+
+document.getElementById("btnBrowseMigDir").addEventListener("click", async () => {
+    const data = await getJSON(`${API}/pick_folder?title=选择目标保存目录`);
+    if (data.folder) document.getElementById("migSaveDir").value = data.folder;
+});
+
+document.getElementById("btnMigGo").addEventListener("click", async () => {
+    const mc = document.getElementById("migMc").value.trim();
+    const loader = document.getElementById("migLoader").value;
+    const saveDir = document.getElementById("migSaveDir").value.trim();
+    const mods = state.migMods
+        .filter(m => m.matched && m.selected && m.project_id)
+        .map(m => ({
+            project_id: m.project_id,
+            name: (m.metadata && (m.metadata.name || m.metadata.mod_id)) || m.filename,
+            source: m.source || "modrinth",
+        }));
+    if (!mods.length) { toast("请至少勾选一个已识别模组", "err"); return; }
+    if (!mc) { toast("请填写目标游戏版本", "err"); return; }
+    if (!saveDir) { toast("请填写目标保存目录", "err"); return; }
+    const source = document.getElementById("migSource").value;
+    const btn = document.getElementById("btnMigGo");
+    btn.disabled = true;
+    setStatus("正在创建迁移任务…", "busy");
+    try {
+        const data = await postJSON(`${API}/migrate_mods`, {
+            mods, mc_version: mc, loader, save_dir: saveDir, source: source || null,
+        });
+        savePref(mc, loader, saveDir);
+        toast(data.queued ? "迁移任务已加入队列排队" : `迁移任务已启动（${mods.length} 个模组）`, "ok");
+        resetPage("pageI");
+        switchPage("pageD");
+    } catch (err) {
+        toast("启动失败：" + err.message, "err");
+    } finally {
+        btn.disabled = false;
+        setStatus("就绪");
+    }
+});
+
+// ================================================================
+// 页面 J：自定义模组包（V3.5）——搜索添加 / 自定义文件名 / 导出同格式 JSON
+// ================================================================
+const CUSTOM_KEY = "mlw_custom_mods";
+
+function loadCustomMods() {
+    try {
+        state.customMods = JSON.parse(localStorage.getItem(CUSTOM_KEY) || "[]");
+    } catch (_) {
+        state.customMods = [];
+    }
+    if (!Array.isArray(state.customMods)) state.customMods = [];
+}
+function saveCustomMods() {
+    try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(state.customMods)); } catch (_) {}
+}
+
+document.getElementById("btnCustomSearch").addEventListener("click", () => searchCustom(1));
+
+async function searchCustom() {
+    const query = document.getElementById("customQuery").value.trim();
+    const loader = document.getElementById("customLoader").value;
+    const box = document.getElementById("customResults");
+    box.innerHTML = `<div class="empty-state compact"><div class="empty-state-title">搜索中…</div></div>`;
+    try {
+        const data = await postJSON(`${API}/search_mod`, {
+            query, loader: loader || null, limit: 20, offset: 0,
+        });
+        renderCustomResults(data.hits || []);
+    } catch (e) {
+        box.innerHTML = `<div class="empty-state compact"><div class="empty-state-title">搜索失败</div><div class="empty-state-desc">${escapeHtml(e.message)}</div></div>`;
+    }
+}
+
+function renderCustomResults(hits) {
+    const box = document.getElementById("customResults");
+    if (!hits.length) {
+        box.innerHTML = `
+            <div class="empty-state compact">
+                <div class="empty-state-title">未找到匹配的模组</div>
+                <div class="empty-state-desc">可尝试直接输入 project ID 精确搜索。</div>
+            </div>`;
+        return;
+    }
+    const inCustom = {};
+    state.customMods.forEach(m => { inCustom[m.project_id] = true; });
+    box.innerHTML = hits.map(h => {
+        const icon = h.icon_url
+            ? `<img class="cat-icon" src="${escapeHtml(h.icon_url)}" onerror="this.style.display='none'" />`
+            : `<div class="cat-icon cat-icon-ph">${escapeHtml((h.title || "?").charAt(0).toUpperCase())}</div>`;
+        const cats = (h.categories || []).slice(0, 4).map(c =>
+            `<span class="chip">${escapeHtml(c)}</span>`).join("");
+        const added = inCustom[h.project_id];
+        return `<div class="cat-item" data-pid="${escapeHtml(h.project_id)}">
+            ${icon}
+            <div class="cat-main">
+                <div class="cat-title">${escapeHtml(h.title)}</div>
+                <div class="cat-desc">${escapeHtml(h.description || "").slice(0, 90)}</div>
+                <div class="cat-tags">${cats}<span class="chip chip-loader">modrinth</span><span class="m-pid">${escapeHtml(h.project_id)}</span></div>
+            </div>
+            <div class="cat-meta">
+                <span class="cat-stat"><b>${formatCount(h.downloads)}</b> 下载</span>
+                <span class="cat-stat"><b>${formatCount(h.followers)}</b> 收藏</span>
+            </div>
+            <div class="cat-open">
+                <button class="btn btn-sm ${added ? "btn-outline" : "btn-primary"} custom-add" data-pid="${escapeHtml(h.project_id)}" data-name="${escapeHtml(h.title)}" ${added ? "disabled" : ""}>${added ? "已添加" : "添加"}</button>
+            </div>
+        </div>`;
+    }).join("");
+}
+
+document.getElementById("customResults").addEventListener("click", (e) => {
+    const btn = e.target.closest(".custom-add");
+    if (!btn) return;
+    addCustomMod(btn.dataset.pid, btn.dataset.name);
+});
+
+function addCustomMod(pid, name) {
+    if (!pid) return;
+    if (state.customMods.some(m => m.project_id === pid)) {
+        toast("该模组已在清单中", "warn");
+        return;
+    }
+    state.customMods.push({ project_id: pid, name, source: "modrinth", custom_name: name });
+    saveCustomMods();
+    renderCustomList();
+    const btns = document.querySelectorAll(`.custom-add[data-pid="${cssEscape(pid)}"]`);
+    btns.forEach(b => { b.disabled = true; b.textContent = "已添加"; b.classList.remove("btn-primary"); b.classList.add("btn-outline"); });
+    toast("已添加到清单", "ok");
+}
+
+function cssEscape(s) {
+    if (window.CSS && CSS.escape) return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+}
+
+function renderCustomList() {
+    const box = document.getElementById("customList");
+    const mods = state.customMods;
+    document.getElementById("customCount").textContent = mods.length;
+    if (!mods.length) {
+        box.innerHTML = `
+            <div class="empty-state compact">
+                <div class="empty-state-title">清单为空</div>
+                <div class="empty-state-desc">从上方搜索结果中添加模组，点击每行的文件名可自定义。</div>
+            </div>`;
+        return;
+    }
+    box.innerHTML = mods.map((m, i) => `
+        <div class="mod-item custom-item" data-pid="${escapeHtml(m.project_id)}">
+            <span class="m-name c-name" title="点击查看详情">${escapeHtml(m.custom_name || m.name || m.project_id)}</span>
+            <span class="m-pid">${escapeHtml(m.project_id)}</span>
+            <span class="chip chip-loader">${escapeHtml(m.source || "modrinth")}</span>
+            <input type="text" class="input input-sm c-rename" value="${escapeHtml(m.custom_name || m.name || "")}" data-idx="${i}" title="自定义文件名 / 显示名" />
+            <span class="m-open custom-actions">
+                <button class="c-arrow" data-idx="${i}" data-dir="-1" title="上移">↑</button>
+                <button class="c-arrow" data-idx="${i}" data-dir="1" title="下移">↓</button>
+                <button class="c-del" data-idx="${i}" title="移除">✕</button>
+            </span>
+        </div>`).join("");
+}
+
+document.getElementById("customList").addEventListener("click", (e) => {
+    const up = e.target.closest(".c-arrow");
+    if (up) {
+        const i = Number(up.dataset.idx);
+        const dir = Number(up.dataset.dir);
+        const j = i + dir;
+        if (j < 0 || j >= state.customMods.length) return;
+        [state.customMods[i], state.customMods[j]] = [state.customMods[j], state.customMods[i]];
+        saveCustomMods();
+        renderCustomList();
+        return;
+    }
+    const del = e.target.closest(".c-del");
+    if (del) {
+        state.customMods.splice(Number(del.dataset.idx), 1);
+        saveCustomMods();
+        renderCustomList();
+        return;
+    }
+    const nameBtn = e.target.closest(".c-name");
+    if (nameBtn) {
+        const item = nameBtn.closest(".mod-item");
+        if (item && item.dataset.pid) openDetail(item.dataset.pid, "pageJ");
+        return;
+    }
+});
+
+document.getElementById("customList").addEventListener("input", (e) => {
+    const inp = e.target.closest(".c-rename");
+    if (!inp) return;
+    const i = Number(inp.dataset.idx);
+    if (!state.customMods[i]) return;
+    state.customMods[i].custom_name = inp.value;
+    saveCustomMods();
+});
+
+document.getElementById("btnCustomClear").addEventListener("click", () => {
+    if (!state.customMods.length) return;
+    if (!confirm("确定清空自定义模组包清单？")) return;
+    state.customMods = [];
+    saveCustomMods();
+    renderCustomList();
+    const box = document.getElementById("customResults");
+    if (box) box.querySelectorAll(".custom-add").forEach(b => { b.disabled = false; b.textContent = "添加"; b.classList.add("btn-primary"); b.classList.remove("btn-outline"); });
+    toast("已清空清单", "ok");
+});
+
+document.getElementById("btnBrowseCustom").addEventListener("click", async () => {
+    const data = await getJSON(`${API}/pick_save?title=导出自定义清单&filename=modpack.json&ext=json`);
+    if (data.path) document.getElementById("customPath").value = data.path;
+});
+
+document.getElementById("btnCustomExport").addEventListener("click", async () => {
+    const mods = state.customMods;
+    if (!mods.length) { toast("清单为空", "err"); return; }
+    const mc = document.getElementById("customMc").value.trim();
+    const loader = document.getElementById("customLoaderMeta").value;
+    let savePath = document.getElementById("customPath").value.trim();
+    if (!savePath) {
+        const data = await getJSON(`${API}/pick_save?title=导出自定义清单&filename=modpack.json&ext=json`);
+        if (!data.path) return;
+        savePath = data.path;
+        document.getElementById("customPath").value = savePath;
+    }
+    try {
+        const data = await postJSON(`${API}/export_json`, {
+            mods: mods.map(m => ({ project_id: m.project_id, name: m.custom_name || m.name, source: m.source || "modrinth" })),
+            game_version: mc,
+            loader,
+            save_path: savePath,
+        });
+        toast(`已导出 ${data.count} 个模组到：${data.save_path}`, "ok");
+    } catch (err) {
+        toast("导出失败：" + err.message, "err");
+    }
+});
+
+// ================================================================
 // 拖拽支持（V3.1）：文件夹 → 扫描目录；modlist.json → 批量下载
 // ================================================================
 function importDroppedJson(path) {
@@ -2213,6 +2729,7 @@ setStatus("就绪");
 loadMcVersions();
 startQueuePoll();
 loadSettings();
+loadCustomMods(); // V3.5：恢复自定义模组包清单
 checkAppUpdate(false); // 启动检查软件更新（V3.1）
 // 请求系统通知权限（下载完成提示用，V3.2）；WebView2 可能不支持，静默失败
 try {

@@ -957,6 +957,57 @@ async def run_batch_download(mr_client, json_path, mc_version, loader, save_dir,
         f"失败 {len(task_state.failed)}，缺失 {len(task_state.missing)}", "info")
 
 
+async def run_migrate_download(mr_client, cf_client, projects, mc_version, loader, save_dir,
+                               task_state, gate, global_source=None):
+    """模组迁移（V3.5）：扫描结果直接批量下载新版本，跳过导出清单步骤
+
+    与 run_batch_download 行为一致，只是数据源是内存中的 projects 列表
+    （[{project_id, name, source}]）而非本地 modlist.json 文件。
+    """
+    if cf_client is None:
+        cf_client = CurseForgeClient()
+    default_source = (global_source or "auto").lower() if global_source else None
+    task_state.kind = "migrate"
+    task_state.mc_version = mc_version
+    task_state.loader = loader
+    task_state.save_dir = save_dir
+    task_state.source = "模组迁移"
+    projects = [p for p in projects or [] if (p or {}).get("project_id")]
+    task_state.total = len(projects)
+    task_state.add_log(
+        f"[开始] 迁移 {len(projects)} 个模组，目标 {mc_version}/{loader}", "info")
+
+    save_path = Path(save_dir)
+    try:
+        save_path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        task_state.add_log(f"[失败] 创建保存目录失败: {e}", "error")
+        task_state.status = "failed"
+        task_state.finished_at = time.time()
+        return
+
+    processed = set()
+    for i, p in enumerate(projects):
+        await gate.check()
+        pid = (p or {}).get("project_id")
+        force_source = (p or {}).get("source") or default_source
+        task_state.done = i
+        if not pid:
+            continue
+        await _resolve_and_download(
+            mr_client, cf_client, pid, mc_version, loader, save_dir,
+            processed, task_state, gate, force_source=force_source)
+
+    task_state.done = task_state.total
+    await _export_missing(task_state, save_dir)
+    task_state.status = "completed"
+    task_state.finished_at = time.time()
+    task_state.add_log(
+        f"[完成] 迁移结束。成功 {len(task_state.success) - task_state.skipped_count}，"
+        f"跳过 {task_state.skipped_count}，"
+        f"失败 {len(task_state.failed)}，缺失 {len(task_state.missing)}", "info")
+
+
 async def run_single_download(mr_client, project_id, mc_version, loader, save_dir, task_state, gate,
                               cf_client=None, force_source=None):
     """单模组下载：根据 project_id 下载单个模组及其前置依赖（多源版本）"""

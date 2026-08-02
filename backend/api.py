@@ -32,6 +32,8 @@ GET  /api/version              当前软件版本 + 版本历史（Changelog）
   POST /api/manage_scan          扫描 mods 目录（含 .disabled 禁用文件，V3.3）
   POST /api/manage_mod           本地模组管理：启用 / 禁用 / 删除（V3.3）
   POST /api/download_updates     一键更新已安装模组（V3.3）
+  POST /api/migrate_mods         模组迁移：扫描结果直接批量下载（V3.5）
+  POST /api/reverse_deps         反依赖分析：查询清单内依赖当前模组的项目（V3.5）
 """
 import json
 import os
@@ -49,7 +51,8 @@ from .modrinth_client import ModrinthClient, ModrinthError
 from .curseforge_client import CurseForgeClient, CurseForgeError
 from .scanner import scan_mods
 from .downloader import (
-    TaskManager, run_batch_download, run_single_download, run_update_download,
+    TaskManager, run_batch_download, run_migrate_download,
+    run_single_download, run_update_download,
     _pick_best_version, _pick_primary_from_version,
 )
 from .settings import init_settings, get_settings
@@ -58,12 +61,25 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.4.0"
+CURRENT_VERSION = "3.5.0"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.5.0",
+        "date": "2026-08",
+        "title": "页面重构 · 模组迁移 · 自定义模组包 · 详情页依赖分析",
+        "items": [
+            "【菜单重构】侧边栏改为「导出」「导入」命名并移除字母角标；新增「模组迁移」「自定义模组包」两个页面。",
+            "【模组迁移】扫描源目录后直接按目标版本/加载器批量下载到新目录，跳过导出清单步骤。",
+            "【自定义模组包】搜索添加 / 移除模组，自定义文件名与顺序，导出与标准清单同格式的 JSON。",
+            "【模组列表】压缩搜索筛选区高度、扩展列表区高度（总高度不变），减少滚动。",
+            "【详情页】新增前置依赖展示（点击跳转依赖详情）与反依赖（后置）分析；作者按 原开发者 / 维护者 / 贡献者 标注角色。",
+            "【返回逻辑】详情页返回按钮回到来源页面（导出 / 导入 / 迁移 / 自定义 等），不再固定回模组列表。",
+        ],
+    },
     {
         "version": "3.4.0",
         "date": "2026-08",
@@ -155,6 +171,15 @@ def _build_task_factory(kind, params, state):
                 params.get("loader"), params.get("save_dir"), state, gate,
                 project_ids=params.get("project_ids"),
                 cf_client=cf_client, global_source=params.get("source"))
+        return _factory
+
+    if kind == "migrate":
+        async def _factory(gate):
+            return await run_migrate_download(
+                client, cf_client, params.get("projects") or [],
+                params.get("mc_version"), params.get("loader"),
+                params.get("save_dir"), state, gate,
+                global_source=params.get("source"))
         return _factory
 
     if kind == "update":
@@ -409,6 +434,20 @@ class TaskControlRequest(BaseModel):
 class RetryRequest(BaseModel):
     task_id: str
     scope: Optional[str] = "all"  # all / failed / missing
+
+
+class MigrateRequest(BaseModel):
+    mods: list = []                  # [{project_id, name, source}]
+    mc_version: str
+    loader: str
+    save_dir: str
+    source: Optional[str] = None     # 全局强制下载源
+
+
+class ReverseDepsRequest(BaseModel):
+    project_id: str
+    source: Optional[str] = None
+    mods: list = []                  # [{project_id, name, source}]
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -714,6 +753,38 @@ async def api_download_from_list(req: DownloadListRequest):
     return {"task_id": tid, "queued": state.status != "running"}
 
 
+@app.post("/api/migrate_mods")
+async def api_migrate_mods(req: MigrateRequest):
+    """模组迁移（V3.5）：扫描结果直接批量下载新版本，跳过导出清单步骤（入队）
+
+    前端完成源目录扫描后提交勾选的模组列表，后端按目标版本 / 加载器
+    直接下载到 save_dir，任务类型为 "migrate"，纳入队列 / 进度 / 结算体系。
+    """
+    projects = [m for m in (req.mods or []) if (m or {}).get("project_id")]
+    if not projects:
+        raise HTTPException(status_code=400, detail="没有可迁移的已识别模组")
+    if not req.mc_version or not req.loader:
+        raise HTTPException(status_code=400, detail="必须指定目标游戏版本与加载器")
+    if not req.save_dir:
+        raise HTTPException(status_code=400, detail="必须指定目标保存目录")
+
+    async def _factory(gate):
+        return await run_migrate_download(
+            client, cf_client, projects, req.mc_version, req.loader,
+            req.save_dir, state, gate, global_source=req.source)
+
+    tid, state = await task_manager.create(
+        "migrate", _factory,
+        params={
+            "projects": projects,
+            "mc_version": req.mc_version,
+            "loader": req.loader,
+            "save_dir": req.save_dir,
+            "source": req.source,
+        })
+    return {"task_id": tid, "queued": state.status != "running"}
+
+
 @app.post("/api/download_updates")
 async def api_download_updates(req: DownloadUpdatesRequest):
     """一键更新已安装模组（V3.3）：下载最新适配版本并清理旧文件（入队）
@@ -830,6 +901,46 @@ async def api_project_detail(project_id: str, source: Optional[str] = None):
     raw_versions = []
     errors = []
 
+    def _normalize_authors(src_name, members):
+        """按来源归一化作者列表并标注角色（原开发者 / 维护者 / 贡献者）
+
+        Modrinth 团队成员按加入时间返回，取最早加入的 Owner 为原开发者；
+        CurseForge 无角色数据，全部视为贡献者。
+        """
+        if src_name == "curseforge":
+            return [
+                {"name": (a or {}).get("name"), "avatar_url": (a or {}).get("avatar_url"),
+                 "role": "author", "role_label": "贡献者"}
+                for a in (members or []) if (a or {}).get("name")
+            ]
+        ordered = sorted(
+            (m for m in (members or []) if isinstance(m, dict)),
+            key=lambda m: str(m.get("created") or ""))
+        creator_marked = False
+        out = []
+        for m in ordered:
+            user = m.get("user") or {}
+            name = user.get("username") or m.get("name")
+            if not name:
+                continue
+            role = (m.get("role") or "").lower()
+            is_creator = (not creator_marked) and role == "owner"
+            if is_creator:
+                creator_marked = True
+            if is_creator:
+                label = "原开发者"
+            elif role in ("owner", "admin"):
+                label = "维护者"
+            else:
+                label = "贡献者"
+            out.append({
+                "name": name,
+                "avatar_url": user.get("avatar_url"),
+                "role": role or "member",
+                "role_label": label,
+            })
+        return out
+
     candidates = []
     if source == "curseforge":
         candidates = [("curseforge", cf_client, int(project_id) if str(project_id).isdigit() else project_id)]
@@ -861,16 +972,12 @@ async def api_project_detail(project_id: str, source: Optional[str] = None):
                             members = await client.get_team(team_id) or []
                         except (ModrinthError, CurseForgeError):
                             members = []
-                        for m in members:
-                            user = m.get("user") or {}
-                            authors.append({
-                                "name": user.get("username") or m.get("name"),
-                                "avatar_url": user.get("avatar_url"),
-                                "role": m.get("role"),
-                            })
+                        authors = _normalize_authors("modrinth", members)
+                    else:
+                        authors = []
                     raw_versions = await client.get_versions_by_project(pid) or []
                 else:
-                    authors = project.get("authors") or []
+                    authors = _normalize_authors("curseforge", project.get("authors") or [])
                     raw_versions = await cf_client.get_versions_by_project(pid) or []
                 project["source"] = src_name
                 break
@@ -886,6 +993,16 @@ async def api_project_detail(project_id: str, source: Optional[str] = None):
 
     versions = []
     for v in raw_versions[:30]:
+        deps = [
+            {
+                "project_id": dep.get("project_id"),
+                "version_id": dep.get("version_id"),
+                "file_name": dep.get("file_name"),
+                "dependency_type": dep.get("dependency_type") or "required",
+            }
+            for dep in (v.get("dependencies") or [])
+            if dep.get("project_id") or dep.get("version_id")
+        ]
         if project.get("source") == "modrinth":
             files = v.get("files") or []
             primary = next((f for f in files if f.get("primary")), files[0] if files else None)
@@ -900,6 +1017,7 @@ async def api_project_detail(project_id: str, source: Optional[str] = None):
                 "filename": primary.get("filename") if primary else None,
                 "filesize": primary.get("size") if primary else None,
                 "download_url": primary.get("url") if primary else None,
+                "dependencies": deps,
             })
         else:
             versions.append({
@@ -913,6 +1031,7 @@ async def api_project_detail(project_id: str, source: Optional[str] = None):
                 "filename": v.get("filename"),
                 "filesize": v.get("filesize"),
                 "download_url": v.get("download_url"),
+                "dependencies": deps,
             })
 
     return {
@@ -964,6 +1083,57 @@ async def api_project_page(project_id: str, source: Optional[str] = None):
     if project_id.isdigit():
         return {"url": await _cf_url(int(project_id)), "source": "curseforge"}
     return {"url": f"https://modrinth.com/project/{project_id}", "source": "modrinth"}
+
+
+@app.post("/api/reverse_deps")
+async def api_reverse_deps(req: ReverseDepsRequest):
+    """反依赖（后置）分析：在给定模组清单中查找「依赖当前模组」的项目（V3.5）
+
+    对清单中每个项目查询其版本依赖（仅取最新几个版本），若依赖中包含
+    req.project_id 则判定为当前模组的反依赖。清单来自来源页面（导出 /
+    导入 / 迁移 / 自定义 等），因此反依赖仅在当前工作集内成立。
+    """
+    target = str(req.project_id or "").strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="project_id 不能为空")
+    if req.mods is None or not req.mods:
+        return {"total": 0, "checked": 0, "errors": 0, "results": []}
+
+    results = []
+    seen = set()
+    checked = 0
+    errors = 0
+    for m in req.mods:
+        pid = (m or {}).get("project_id")
+        if not pid or str(pid) == target:
+            continue
+        src = ((m or {}).get("source") or "modrinth").lower()
+        cl = cf_client if src == "curseforge" else client
+        try:
+            versions = await cl.get_versions_by_project(pid, None, None) or []
+        except (ModrinthError, CurseForgeError):
+            errors += 1
+            continue
+        checked += 1
+        hit = False
+        for v in versions[:3]:
+            for dep in (v.get("dependencies") or []):
+                dep_pid = dep.get("project_id")
+                if dep_pid is not None and str(dep_pid) == target:
+                    key = (str(pid), str(src))
+                    if key not in seen:
+                        seen.add(key)
+                        results.append({
+                            "project_id": pid,
+                            "name": (m or {}).get("name") or pid,
+                            "source": src,
+                            "dependency_type": dep.get("dependency_type") or "required",
+                        })
+                    hit = True
+                    break
+            if hit:
+                break
+    return {"total": len(results), "checked": checked, "errors": errors, "results": results}
 
 
 # ==================== 下载队列控制 ====================

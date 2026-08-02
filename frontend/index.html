@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ModList-Weaver v3.4.0 · Minecraft 双源模组迁移工具</title>
+    <title>ModList-Weaver v3.5.0 · Minecraft 双源模组迁移工具</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -22,14 +22,14 @@
                 </div>
                 <div class="sidebar-brand-text">
                     <div class="sb-title">ModList-Weaver</div>
-                    <div class="sb-sub">模组迁移工具 v3.4.0</div>
+                    <div class="sb-sub">模组迁移工具 v3.5.0</div>
                 </div>
             </div>
 
             <nav class="sidebar-nav">
                 <div class="nav-group-title">工作流</div>
 
-                <!-- A：扫描导出（三步向导） -->
+                <!-- 导出（原 A：扫描导出三步向导） -->
                 <a href="#" class="nav-item active" data-page="pageA">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -38,11 +38,10 @@
                             <line x1="12" y1="10" x2="12" y2="18"/>
                         </svg>
                     </span>
-                    <span class="nav-label">扫描 &amp; 导出清单</span>
-                    <span class="nav-badge">A</span>
+                    <span class="nav-label">导出</span>
                 </a>
 
-                <!-- B：批量下载（三步向导） -->
+                <!-- 导入（原 B：批量下载三步向导） -->
                 <a href="#" class="nav-item" data-page="pageB">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -51,11 +50,31 @@
                             <line x1="12" y1="15" x2="12" y2="3"/>
                         </svg>
                     </span>
-                    <span class="nav-label">批量下载模组</span>
-                    <span class="nav-badge">B</span>
+                    <span class="nav-label">导入</span>
                 </a>
 
-                <!-- C：模组列表（无步骤） -->
+                <!-- 迁移（V3.5） -->
+                <a href="#" class="nav-item" data-page="pageI">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M2 12h20"/><path d="M12 2v20"/>
+                            <path d="M9 9l3-3 3 3"/><path d="M9 15l3 3 3-3"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">迁移</span>
+                </a>
+
+                <!-- 自定义模组包（V3.5） -->
+                <a href="#" class="nav-item" data-page="pageJ">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">自定义模组包</span>
+                </a>
+
+                <!-- C：模组列表 -->
                 <a href="#" class="nav-item" data-page="pageC">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -66,7 +85,6 @@
                         </svg>
                     </span>
                     <span class="nav-label">模组列表</span>
-                    <span class="nav-badge">C</span>
                 </a>
 
                 <!-- E：本地模组管理（V3.3） -->
@@ -78,7 +96,6 @@
                         </svg>
                     </span>
                     <span class="nav-label">本地模组</span>
-                    <span class="nav-badge">E</span>
                 </a>
 
                 <div class="nav-group-title">运维</div>
@@ -95,7 +112,6 @@
                         </svg>
                     </span>
                     <span class="nav-label">任务中心</span>
-                    <span class="nav-badge">D</span>
                 </a>
 
                 <div class="nav-group-title">更多</div>
@@ -110,7 +126,6 @@
                         </svg>
                     </span>
                     <span class="nav-label">关于</span>
-                    <span class="nav-badge">F</span>
                 </a>
 
                 <!-- G：设置 -->
@@ -122,7 +137,6 @@
                         </svg>
                     </span>
                     <span class="nav-label">设置</span>
-                    <span class="nav-badge">G</span>
                 </a>
             </nav>
 
@@ -141,7 +155,7 @@
                     <div class="breadcrumb">
                         <span class="bc-root" id="breadcrumbRoot">工作流</span>
                         <span class="bc-sep">/</span>
-                        <span class="bc-current" id="breadcrumbCurrent">扫描 &amp; 导出清单</span>
+                        <span class="bc-current" id="breadcrumbCurrent">导出</span>
                     </div>
                 </div>
                 <div class="appbar-right">
@@ -513,6 +527,223 @@
                     </div>
                 </section>
 
+                <!-- ==================== 页面 I：模组迁移（V3.5） ==================== -->
+                <section class="page" id="pageI">
+                    <div class="page-head">
+                        <div>
+                            <h2 class="page-title">模组迁移</h2>
+                            <p class="page-desc">扫描旧版本 mods 目录，选择目标版本与加载器后直接批量下载到新目录，无需先导出清单。</p>
+                        </div>
+                        <div class="page-stats" id="migStat">
+                            <div class="stat-card stat-total">
+                                <div class="stat-num" id="migTotal">0</div>
+                                <div class="stat-label">已识别</div>
+                            </div>
+                            <div class="stat-card stat-ok">
+                                <div class="stat-num" id="migSelected">0</div>
+                                <div class="stat-label">已勾选</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">1</span> 源目录（旧版本 mods）</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row">
+                                <div class="form-field form-field-flex">
+                                    <label>源模组目录路径</label>
+                                    <div class="input-group">
+                                        <input type="text" id="migFolder" class="input" placeholder="选择或粘贴旧版本 mods 目录路径" />
+                                        <button class="btn btn-outline" id="btnBrowseMig">浏览文件夹</button>
+                                    </div>
+                                </div>
+                                <div class="form-field form-field-actions">
+                                    <button class="btn btn-primary" id="btnMigScan">扫描源目录</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">2</span> 勾选需迁移的模组</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="mod-toolbar">
+                                <div class="mt-left">
+                                    <button class="btn btn-outline btn-sm" id="btnMigAll">全选</button>
+                                    <button class="btn btn-outline btn-sm" id="btnMigNone">清空</button>
+                                    <button class="btn btn-outline btn-sm" id="btnMigInvert">反选</button>
+                                    <span class="mt-hint">已选 <b id="migSelCount">0</b> / <span id="migSelTotal">0</span></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body no-pad">
+                            <div class="mod-list" id="migList">
+                                <div class="empty-state compact">
+                                    <div class="empty-state-title">请先扫描源目录</div>
+                                    <div class="empty-state-desc">扫描后将列出已识别模组，勾选后配置目标并开始迁移。</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">3</span> 目标配置</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row form-row-grid">
+                                <div class="form-field form-field-2col">
+                                    <label>目标保存目录（新版本 mods）</label>
+                                    <div class="input-group">
+                                        <input type="text" id="migSaveDir" class="input" placeholder="选择迁移后模组的保存目录" />
+                                        <button class="btn btn-outline" id="btnBrowseMigDir">浏览文件夹</button>
+                                    </div>
+                                </div>
+                                <div class="form-field">
+                                    <label>目标游戏版本</label>
+                                    <input type="text" id="migMc" class="input" list="mcVersionsList" placeholder="选择或输入 MC 版本，如 1.21.1" />
+                                </div>
+                                <div class="form-field">
+                                    <label>目标加载器</label>
+                                    <select id="migLoader" class="input">
+                                        <option value="fabric">Fabric</option>
+                                        <option value="forge">Forge</option>
+                                        <option value="neoforge">NeoForge</option>
+                                        <option value="quilt">Quilt</option>
+                                    </select>
+                                </div>
+                                <div class="form-field">
+                                    <label>下载源</label>
+                                    <select id="migSource" class="input">
+                                        <option value="">自动（先 Modrinth 再 CurseForge）</option>
+                                        <option value="modrinth">仅 Modrinth</option>
+                                        <option value="curseforge">仅 CurseForge</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="btn btn-primary btn-lg" id="btnMigGo">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M2 12h20"/><path d="M12 2v20"/>
+                                <path d="M9 9l3-3 3 3"/><path d="M9 15l3 3 3-3"/>
+                            </svg>
+                            开始迁移
+                        </button>
+                        <span class="field-hint">自动解析并下载 required 前置依赖；无适配新版本的模组会记录为缺失。</span>
+                    </div>
+                </section>
+
+                <!-- ==================== 页面 J：自定义模组包（V3.5） ==================== -->
+                <section class="page" id="pageJ">
+                    <div class="page-head">
+                        <div>
+                            <h2 class="page-title">自定义模组包</h2>
+                            <p class="page-desc">搜索挑选模组组成自定义清单（打包），可自定义文件名与排序，导出与标准清单同格式的 JSON。</p>
+                        </div>
+                        <div class="page-stats" id="customStat">
+                            <div class="stat-card stat-total">
+                                <div class="stat-num" id="customCount">0</div>
+                                <div class="stat-label">清单模组</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">①</span> 搜索添加</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row form-row-grid">
+                                <div class="form-field form-field-flex">
+                                    <label>搜索模组</label>
+                                    <input type="text" id="customQuery" class="input" placeholder="模组名称 / slug / project ID（留空浏览全部）" />
+                                </div>
+                                <div class="form-field">
+                                    <label>加载器</label>
+                                    <select id="customLoader" class="input">
+                                        <option value="">全部加载器</option>
+                                        <option value="fabric">Fabric</option>
+                                        <option value="forge">Forge</option>
+                                        <option value="neoforge">NeoForge</option>
+                                        <option value="quilt">Quilt</option>
+                                    </select>
+                                </div>
+                                <div class="form-field form-field-actions">
+                                    <button class="btn btn-primary" id="btnCustomSearch">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="11" cy="11" r="8"/>
+                                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                        </svg>
+                                        搜索
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="custom-search-results" id="customResults">
+                                <div class="empty-state compact">
+                                    <div class="empty-state-title">输入关键词搜索模组并添加到清单</div>
+                                    <div class="empty-state-desc">也可在搜索框直接输入 project ID / slug 精确查找。</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">②</span> 我的清单</div>
+                            <div class="log-actions">
+                                <button class="btn btn-outline btn-sm" id="btnCustomClear">清空</button>
+                                <button class="btn btn-primary btn-sm" id="btnCustomExport">导出 JSON</button>
+                            </div>
+                        </div>
+                        <div class="card-body no-pad">
+                            <div class="mod-list" id="customList">
+                                <div class="empty-state compact">
+                                    <div class="empty-state-title">清单为空</div>
+                                    <div class="empty-state-desc">从上方搜索结果中添加模组，点击每行的文件名可自定义。</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-head">
+                            <div class="ch-title"><span class="ch-step">③</span> 导出配置</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row form-row-grid">
+                                <div class="form-field">
+                                    <label>清单游戏版本（可选）</label>
+                                    <input type="text" id="customMc" class="input" list="mcVersionsList" placeholder="选择或输入 MC 版本，如 1.21.1" />
+                                </div>
+                                <div class="form-field">
+                                    <label>清单加载器（可选）</label>
+                                    <select id="customLoaderMeta" class="input">
+                                        <option value="">自动</option>
+                                        <option value="fabric">Fabric</option>
+                                        <option value="forge">Forge</option>
+                                        <option value="neoforge">NeoForge</option>
+                                        <option value="quilt">Quilt</option>
+                                    </select>
+                                </div>
+                                <div class="form-field form-field-2col">
+                                    <label>保存路径</label>
+                                    <div class="input-group">
+                                        <input type="text" id="customPath" class="input" placeholder="选择导出位置，如 D:\modpack.json" />
+                                        <button class="btn btn-outline" id="btnBrowseCustom">浏览…</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- ==================== 页面 C：模组列表（列表 + 详情） ==================== -->
                 <section class="page" id="pageC">
 
@@ -534,7 +765,7 @@
                             </div>
                         </div>
 
-                        <div class="card">
+                        <div class="card cat-filter-card">
                             <div class="card-head">
                                 <div class="ch-title">搜索与筛选</div>
                             </div>
@@ -578,7 +809,7 @@
                             </div>
                         </div>
 
-                        <div class="card">
+                        <div class="card cat-list-card">
                             <div class="card-head">
                                 <div class="ch-title">模组列表</div>
                                 <span class="ch-hint" id="catInfo">—</span>
@@ -867,7 +1098,7 @@
                                 </div>
                                 <div class="about-hero-main">
                                     <div class="about-name">ModList-Weaver</div>
-                                    <div class="about-ver">版本 v3.4.0</div>
+                                    <div class="about-ver">版本 v3.5.0</div>
                                     <div class="about-desc">Minecraft 双源（Modrinth + CurseForge）模组迁移工具：扫描旧版本 mods 目录、导出 modlist.json、批量 / 单模组下载。</div>
                                     <div class="about-update-row">
                                         <button class="btn btn-outline btn-sm" id="btnCheckAppUpdate">检查更新</button>
@@ -899,6 +1130,26 @@
                         <div class="card-body">
                             <div class="changelog-section" id="changelogRoot">
                                 <div class="cl-item cl-fold" data-open="1">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">
+                                            <a href="https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v3.5.0" target="_blank" rel="noopener">v3.5.0</a>
+                                        </span>
+                                        <span class="cl-date">2026-08</span>
+                                        <span class="cl-fold-hint">▾</span>
+                                    </div>
+                                    <div class="cl-fold-body">
+                                        <div class="cl-title">页面重构 · 模组迁移 · 自定义模组包 · 详情页依赖分析</div>
+                                        <ul class="cl-list">
+                                            <li><b>【菜单重构】</b>侧边栏改为「导出」「导入」命名并移除字母角标；新增「模组迁移」「自定义模组包」两个页面。</li>
+                                            <li><b>【模组迁移】</b>扫描源目录后直接按目标版本/加载器批量下载到新目录，跳过导出清单步骤。</li>
+                                            <li><b>【自定义模组包】</b>搜索添加 / 移除模组，自定义文件名与顺序，导出与标准清单同格式的 JSON。</li>
+                                            <li><b>【模组列表】</b>压缩搜索筛选区高度、扩展列表区高度（总高度不变），减少滚动。</li>
+                                            <li><b>【详情页】</b>新增前置依赖展示（点击跳转依赖详情）与反依赖（后置）分析；作者按 原开发者 / 维护者 / 贡献者 标注角色。</li>
+                                            <li><b>【返回逻辑】</b>详情页返回按钮回到来源页面（导出 / 导入 / 迁移 / 自定义 等），不再固定回模组列表。</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="cl-item cl-fold" data-open="0">
                                     <div class="cl-head" role="button" title="点击展开/收起">
                                         <span class="cl-ver">
                                             <a href="https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v3.4.0" target="_blank" rel="noopener">v3.4.0</a>
