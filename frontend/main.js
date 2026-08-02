@@ -152,7 +152,7 @@ const PAGE_TITLES = {
     pageA: "导出",
     pageB: "导入",
     pageI: "迁移",
-    pageJ: "自定义模组包",
+    pageJ: "我的清单",
     pageC: "模组列表",
     pageE: "本地模组",
     pageD: "任务中心",
@@ -192,7 +192,12 @@ const state = {
     manMods: [],          // 本地模组管理（页面 E）：扫描结果（V3.3）
     manUpdateMap: {},     // 页面 E：project_id -> 更新信息（V3.3）
     migMods: [],          // 模组迁移（页面 I）：扫描结果（V3.5）
+    migStep: 1,           // 模组迁移（页面 I）：向导步骤（V3.6）
     customMods: [],       // 自定义模组包（页面 J）：清单（V3.5）
+    customSel: new Map(),   // 添加悬浮框（V3.6）：已勾选 pid -> {pid, name, source}
+    customDepInfo: {},      // 添加悬浮框（V3.6）：pid -> [{project_id, name}] 必需依赖
+    customDepLoading: {},   // 添加悬浮框（V3.6）：依赖读取中标记
+    customLastHits: [],     // 添加悬浮框（V3.6）：最近搜索结果（依赖行刷新用）
 };
 
 // 模组列表页（页面 C）：搜索状态
@@ -257,11 +262,13 @@ function switchPage(pageId) {
         if (ldr) ldr.value = pref.loader || "fabric";
     }
     if (pageId === "pageI") {
-        // 预填迁移目标（V3.5）
+        // 预填迁移目标（V3.5）；恢复向导步骤（V3.6）
         const mc = document.getElementById("migMc");
         const ldr = document.getElementById("migLoader");
         if (mc && !mc.value) mc.value = pref.mc || "";
         if (ldr) ldr.value = pref.loader || "fabric";
+        const step = state.migMods.length ? (state.migStep || 1) : 1;
+        showIStep(step, true);
         updateMigCount();
     }
     if (pageId === "pageJ") {
@@ -343,6 +350,7 @@ function resetPage(pageId) {
             break;
         case "pageI":
             state.migMods = [];
+            state.migStep = 1;
             const migFolder = document.getElementById("migFolder");
             if (migFolder) migFolder.value = "";
             const migMc = document.getElementById("migMc");
@@ -351,9 +359,12 @@ function resetPage(pageId) {
             if (migSave) migSave.value = "";
             renderMigList();
             updateMigCount();
+            showIStep(1, true);
             break;
         case "pageJ":
             state.customMods = [];
+            state.customSel = new Map();
+            state.customDepInfo = {};
             const customPath = document.getElementById("customPath");
             if (customPath) customPath.value = "";
             saveCustomMods();
@@ -2311,6 +2322,7 @@ async function scanMigMods() {
         updateMigCount();
         setStatus("就绪");
         toast(`扫描完成：${data.matched}/${data.total} 已识别`, "ok");
+        showIStep(2, true); // V3.6：扫描完成进入勾选步骤
     } catch (e) {
         setStatus("就绪");
         toast("扫描失败：" + e.message, "err");
@@ -2374,7 +2386,88 @@ function updateMigCount() {
     if (sc) sc.textContent = selected.length;
     const st = document.getElementById("migSelTotal");
     if (st) st.textContent = matched.length;
+    const selNext = document.getElementById("btnISelNext");
+    if (selNext) selNext.disabled = !selected.length;
 }
+
+// ================================================================
+// 页面 I：迁移向导步骤（V3.6）——扫描 → 勾选 → 目标配置 → 确认迁移
+// ================================================================
+const MIG_WIZARD_VIEWS = {
+    1: "i-step-scan",
+    2: "i-step-select",
+    3: "i-step-config",
+    4: "i-step-go",
+};
+
+function showIStep(n, silent) {
+    state.migStep = n;
+    Object.entries(MIG_WIZARD_VIEWS).forEach(([step, id]) => {
+        document.getElementById(id).classList.toggle("active", Number(step) === n);
+    });
+    document.querySelectorAll("#wizardISteps .wstep").forEach(el => {
+        const step = Number(el.dataset.step);
+        el.classList.toggle("active", step === n);
+        el.classList.toggle("done", step < n);
+    });
+    const hasScan = state.migMods.length > 0;
+    const selCount = state.migMods.filter(m => m.matched && m.selected).length;
+    const btnScanNext = document.getElementById("btnIScanNext");
+    if (btnScanNext) btnScanNext.disabled = !hasScan;
+    const btnSelNext = document.getElementById("btnISelNext");
+    if (btnSelNext) btnSelNext.disabled = !selCount;
+    if (n === 2) renderMigList();
+    if (n === 4) fillMigConfirm();
+    if (!silent) {
+        const titles = { 1: "源目录扫描", 2: "勾选模组", 3: "目标配置", 4: "确认迁移" };
+        setStatus("步骤 " + n + "：" + titles[n], "");
+    }
+}
+
+function fillMigConfirm() {
+    document.getElementById("cfMigFolder").textContent = document.getElementById("migFolder").value.trim() || "—";
+    const sel = state.migMods.filter(m => m.matched && m.selected && m.project_id);
+    document.getElementById("cfMigCount").textContent = sel.length ? sel.length + " 个" : "—";
+    document.getElementById("cfMigMc").textContent = document.getElementById("migMc").value.trim() || "—";
+    document.getElementById("cfMigLoader").textContent = LOADER_LABELS[document.getElementById("migLoader").value] || "—";
+    document.getElementById("cfMigSaveDir").textContent = document.getElementById("migSaveDir").value.trim() || "—";
+}
+
+// 步骤指示器点击（仅可回到已完成步骤，后续步骤需校验）
+document.getElementById("wizardISteps").addEventListener("click", (e) => {
+    const ws = e.target.closest(".wstep");
+    if (!ws) return;
+    const step = Number(ws.dataset.step);
+    if (step > 1 && !state.migMods.length) {
+        toast("请先在步骤 1 完成扫描", "err");
+        return;
+    }
+    if ((step === 3 || step === 4) && !state.migMods.some(m => m.matched && m.selected)) {
+        toast("请先在步骤 2 勾选模组", "err");
+        return;
+    }
+    if (step === 4 && !document.getElementById("migMc").value.trim()) {
+        toast("请先填写目标游戏版本", "err");
+        return;
+    }
+    showIStep(step);
+});
+
+document.getElementById("btnIScanNext").addEventListener("click", () => {
+    if (!state.migMods.length) { toast("请先扫描源目录", "err"); return; }
+    showIStep(2);
+});
+document.getElementById("btnISelPrev").addEventListener("click", () => showIStep(1));
+document.getElementById("btnISelNext").addEventListener("click", () => {
+    if (!state.migMods.some(m => m.matched && m.selected)) { toast("请至少勾选一个模组", "err"); return; }
+    showIStep(3);
+});
+document.getElementById("btnIConfPrev").addEventListener("click", () => showIStep(2));
+document.getElementById("btnIConfNext").addEventListener("click", () => {
+    if (!state.migMods.some(m => m.matched && m.selected)) { toast("请至少勾选一个模组", "err"); return; }
+    showIStep(4);
+});
+document.getElementById("btnIGoPrev").addEventListener("click", () => showIStep(3));
 
 document.getElementById("btnMigAll").addEventListener("click", () => {
     state.migMods.forEach(m => { if (m.matched) m.selected = true; });
@@ -2438,7 +2531,7 @@ document.getElementById("btnMigGo").addEventListener("click", async () => {
 });
 
 // ================================================================
-// 页面 J：自定义模组包（V3.5）——搜索添加 / 自定义文件名 / 导出同格式 JSON
+// 页面 J：自定义模组包（V3.6）——悬浮框搜索添加（自动附带依赖）/ 自定义文件名 / 导出同格式 JSON
 // ================================================================
 const CUSTOM_KEY = "mlw_custom_mods";
 
@@ -2454,7 +2547,38 @@ function saveCustomMods() {
     try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(state.customMods)); } catch (_) {}
 }
 
-document.getElementById("btnCustomSearch").addEventListener("click", () => searchCustom(1));
+// ================================================================
+// 页面 J：我的清单 / 自定义模组包（V3.6）——悬浮框搜索添加 + 自动前置依赖 + 悬浮框导出
+// ================================================================
+
+// ---------- 添加模组悬浮框 ----------
+function openCustomAddModal() {
+    state.customSel = new Map();
+    const q = document.getElementById("customQuery");
+    if (q) q.value = "";
+    document.getElementById("customLoader").value = "";
+    const box = document.getElementById("customResults");
+    box.innerHTML = `
+        <div class="empty-state compact">
+            <div class="empty-state-title">输入关键词搜索模组并勾选添加</div>
+            <div class="empty-state-desc">勾选模组后将显示其前置依赖，确认时自动一并添加。</div>
+        </div>`;
+    updateCustomSelUI();
+    document.getElementById("customAddModal").style.display = "";
+    setTimeout(() => { if (q) q.focus(); }, 50);
+}
+function closeCustomAddModal() {
+    document.getElementById("customAddModal").style.display = "none";
+}
+document.getElementById("btnCustomAdd").addEventListener("click", openCustomAddModal);
+document.getElementById("btnCustomAddClose").addEventListener("click", closeCustomAddModal);
+document.getElementById("customAddModal").addEventListener("click", (e) => {
+    if (e.target === document.getElementById("customAddModal")) closeCustomAddModal();
+});
+
+document.getElementById("btnCustomSearch").addEventListener("click", () => searchCustom());
+document.getElementById("customQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") searchCustom(); });
+document.getElementById("customLoader").addEventListener("change", () => searchCustom());
 
 async function searchCustom() {
     const query = document.getElementById("customQuery").value.trim();
@@ -2465,7 +2589,8 @@ async function searchCustom() {
         const data = await postJSON(`${API}/search_mod`, {
             query, loader: loader || null, limit: 20, offset: 0,
         });
-        renderCustomResults(data.hits || []);
+        state.customLastHits = data.hits || [];
+        renderCustomResults(state.customLastHits);
     } catch (e) {
         box.innerHTML = `<div class="empty-state compact"><div class="empty-state-title">搜索失败</div><div class="empty-state-desc">${escapeHtml(e.message)}</div></div>`;
     }
@@ -2473,6 +2598,7 @@ async function searchCustom() {
 
 function renderCustomResults(hits) {
     const box = document.getElementById("customResults");
+    if (!box) return;
     if (!hits.length) {
         box.innerHTML = `
             <div class="empty-state compact">
@@ -2484,55 +2610,182 @@ function renderCustomResults(hits) {
     const inCustom = {};
     state.customMods.forEach(m => { inCustom[m.project_id] = true; });
     box.innerHTML = hits.map(h => {
+        const pid = String(h.project_id);
         const icon = h.icon_url
             ? `<img class="cat-icon" src="${escapeHtml(h.icon_url)}" onerror="this.style.display='none'" />`
             : `<div class="cat-icon cat-icon-ph">${escapeHtml((h.title || "?").charAt(0).toUpperCase())}</div>`;
         const cats = (h.categories || []).slice(0, 4).map(c =>
             `<span class="chip">${escapeHtml(c)}</span>`).join("");
-        const added = inCustom[h.project_id];
-        return `<div class="cat-item" data-pid="${escapeHtml(h.project_id)}">
+        const added = inCustom[pid];
+        const checked = state.customSel.has(pid) ? "checked" : "";
+        const disabled = added ? "disabled" : "";
+        const stateTag = added ? `<span class="m-badge ok">已在清单</span>` : "";
+        let depsLine = "";
+        if (added) {
+            depsLine = "";
+        } else if (state.customDepLoading[pid]) {
+            depsLine = `<div class="c-deps"><span class="c-deps-tag">正在读取前置依赖…</span></div>`;
+        } else if (state.customDepInfo[pid]) {
+            const deps = state.customDepInfo[pid];
+            depsLine = deps.length
+                ? `<div class="c-deps"><b>必需依赖</b>${deps.map(d => `<span class="chip">${escapeHtml(d.name)}</span>`).join("")}</div>`
+                : `<div class="c-deps"><span class="c-deps-tag">无必需依赖</span></div>`;
+        }
+        return `<div class="cat-item" data-pid="${escapeHtml(pid)}">
+            <input type="checkbox" class="c-sel" data-pid="${escapeHtml(pid)}" data-name="${escapeHtml(h.title)}" ${checked} ${disabled} title="${added ? "该模组已在清单中" : "勾选添加到清单"}" />
             ${icon}
             <div class="cat-main">
-                <div class="cat-title">${escapeHtml(h.title)}</div>
+                <div class="cat-title">${escapeHtml(h.title)}${stateTag}</div>
                 <div class="cat-desc">${escapeHtml(h.description || "").slice(0, 90)}</div>
-                <div class="cat-tags">${cats}<span class="chip chip-loader">modrinth</span><span class="m-pid">${escapeHtml(h.project_id)}</span></div>
+                <div class="cat-tags">${cats}<span class="chip chip-loader">modrinth</span><span class="m-pid">${escapeHtml(pid)}</span></div>
+                ${depsLine}
             </div>
             <div class="cat-meta">
                 <span class="cat-stat"><b>${formatCount(h.downloads)}</b> 下载</span>
                 <span class="cat-stat"><b>${formatCount(h.followers)}</b> 收藏</span>
-            </div>
-            <div class="cat-open">
-                <button class="btn btn-sm ${added ? "btn-outline" : "btn-primary"} custom-add" data-pid="${escapeHtml(h.project_id)}" data-name="${escapeHtml(h.title)}" ${added ? "disabled" : ""}>${added ? "已添加" : "添加"}</button>
             </div>
         </div>`;
     }).join("");
 }
 
 document.getElementById("customResults").addEventListener("click", (e) => {
-    const btn = e.target.closest(".custom-add");
-    if (!btn) return;
-    addCustomMod(btn.dataset.pid, btn.dataset.name);
+    const cb = e.target.closest(".c-sel");
+    if (!cb) return;
+    const pid = cb.dataset.pid;
+    if (cb.checked) {
+        state.customSel.set(pid, { pid, name: cb.dataset.name, source: "modrinth" });
+        loadCustomDeps(pid);
+    } else {
+        state.customSel.delete(pid);
+    }
+    updateCustomSelUI();
 });
 
-function addCustomMod(pid, name) {
-    if (!pid) return;
-    if (state.customMods.some(m => m.project_id === pid)) {
-        toast("该模组已在清单中", "warn");
+// 读取已勾选模组的必需前置依赖（用于展示与确认时自动附带）
+async function loadCustomDeps(pid) {
+    if (state.customDepInfo[pid] !== undefined || state.customDepLoading[pid]) return;
+    state.customDepLoading[pid] = true;
+    renderCustomResults(state.customLastHits);
+    try {
+        const d = await getJSON(`${API}/project/${encodeURIComponent(pid)}`);
+        const latest = (d.versions || [])[0];
+        const depPids = [];
+        for (const dep of (latest && latest.dependencies) || []) {
+            if (!dep || dep.project_id === undefined || dep.project_id === null) continue;
+            if (dep.dependency_type === "required") depPids.push(String(dep.project_id));
+        }
+        const infos = [];
+        await Promise.all(depPids.map(async dp => {
+            try {
+                const dd = await getJSON(`${API}/project/${encodeURIComponent(dp)}`);
+                infos.push({ project_id: dp, name: dd.title || dd.project_id || dp });
+            } catch (_) {
+                infos.push({ project_id: dp, name: dp });
+            }
+        }));
+        state.customDepInfo[pid] = infos;
+    } catch (_) {
+        state.customDepInfo[pid] = state.customDepInfo[pid] || [];
+    } finally {
+        state.customDepLoading[pid] = false;
+        if (document.getElementById("customAddModal").style.display !== "none") {
+            renderCustomResults(state.customLastHits);
+        }
+    }
+}
+
+function updateCustomSelUI() {
+    const n = state.customSel.size;
+    const hint = document.getElementById("customSelHint");
+    const btn = document.getElementById("btnCustomAddConfirm");
+    if (btn) {
+        btn.disabled = !n;
+        btn.textContent = `确认添加（${n}）`;
+    }
+    if (!hint) return;
+    if (!n) { hint.textContent = "已选 0 项"; return; }
+    const depSeen = new Set();
+    for (const pid of state.customSel.keys()) {
+        for (const d of (state.customDepInfo[pid] || [])) {
+            if (!state.customSel.has(d.project_id) && !state.customMods.some(m => m.project_id === d.project_id)) {
+                depSeen.add(d.project_id);
+            }
+        }
+    }
+    hint.textContent = depSeen.size ? `已选 ${n} 项 · 将附带 ${depSeen.size} 项必需依赖` : `已选 ${n} 项`;
+}
+
+document.getElementById("btnCustomAddConfirm").addEventListener("click", confirmAddCustom);
+
+function confirmAddCustom() {
+    if (!state.customSel.size) { toast("请先勾选模组", "err"); return; }
+    const toAdd = [];
+    const seen = new Set(state.customMods.map(m => m.project_id));
+    const push = (pid, name) => {
+        if (seen.has(pid)) return;
+        seen.add(pid);
+        toAdd.push({ project_id: pid, name, source: "modrinth", custom_name: name });
+    };
+    for (const sel of state.customSel.values()) {
+        push(sel.pid, sel.name);
+        for (const d of (state.customDepInfo[sel.pid] || [])) push(d.project_id, d.name);
+    }
+    if (!toAdd.length) {
+        toast("所选模组及其依赖均已在清单中", "warn");
+        closeCustomAddModal();
         return;
     }
-    state.customMods.push({ project_id: pid, name, source: "modrinth", custom_name: name });
+    state.customMods.push(...toAdd);
     saveCustomMods();
     renderCustomList();
-    const btns = document.querySelectorAll(`.custom-add[data-pid="${cssEscape(pid)}"]`);
-    btns.forEach(b => { b.disabled = true; b.textContent = "已添加"; b.classList.remove("btn-primary"); b.classList.add("btn-outline"); });
-    toast("已添加到清单", "ok");
+    closeCustomAddModal();
+    toast(`已添加 ${toAdd.length} 个模组到清单`, "ok");
 }
 
-function cssEscape(s) {
-    if (window.CSS && CSS.escape) return CSS.escape(s);
-    return String(s).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+// ---------- 导出悬浮框 ----------
+function openCustomExportModal() {
+    const mc = document.getElementById("customMc");
+    if (mc && !mc.value) mc.value = pref.mc || "";
+    document.getElementById("customExportModal").style.display = "";
+}
+function closeCustomExportModal() {
+    document.getElementById("customExportModal").style.display = "none";
+}
+document.getElementById("btnCustomExport").addEventListener("click", openCustomExportModal);
+document.getElementById("btnCustomExportClose").addEventListener("click", closeCustomExportModal);
+document.getElementById("btnCustomExportCancel").addEventListener("click", closeCustomExportModal);
+document.getElementById("customExportModal").addEventListener("click", (e) => {
+    if (e.target === document.getElementById("customExportModal")) closeCustomExportModal();
+});
+document.getElementById("btnCustomExportGo").addEventListener("click", exportCustomList);
+
+async function exportCustomList() {
+    const mods = state.customMods;
+    if (!mods.length) { toast("清单为空", "err"); return; }
+    const mc = document.getElementById("customMc").value.trim();
+    const loader = document.getElementById("customLoaderMeta").value;
+    let savePath = document.getElementById("customPath").value.trim();
+    if (!savePath) {
+        const data = await getJSON(`${API}/pick_save?title=导出自定义清单&filename=modpack.json&ext=json`);
+        if (!data.path) return;
+        savePath = data.path;
+        document.getElementById("customPath").value = savePath;
+    }
+    try {
+        const data = await postJSON(`${API}/export_json`, {
+            mods: mods.map(m => ({ project_id: m.project_id, name: m.custom_name || m.name, source: m.source || "modrinth" })),
+            game_version: mc,
+            loader,
+            save_path: savePath,
+        });
+        closeCustomExportModal();
+        toast(`已导出 ${data.count} 个模组到：${data.save_path}`, "ok");
+    } catch (err) {
+        toast("导出失败：" + err.message, "err");
+    }
 }
 
+// ---------- 清单展示与操作 ----------
 function renderCustomList() {
     const box = document.getElementById("customList");
     const mods = state.customMods;
@@ -2599,41 +2852,19 @@ document.getElementById("btnCustomClear").addEventListener("click", () => {
     if (!state.customMods.length) return;
     if (!confirm("确定清空自定义模组包清单？")) return;
     state.customMods = [];
+    state.customSel = new Map();
+    state.customDepInfo = {};
     saveCustomMods();
     renderCustomList();
-    const box = document.getElementById("customResults");
-    if (box) box.querySelectorAll(".custom-add").forEach(b => { b.disabled = false; b.textContent = "添加"; b.classList.add("btn-primary"); b.classList.remove("btn-outline"); });
+    if (document.getElementById("customAddModal").style.display !== "none") {
+        renderCustomResults(state.customLastHits);
+    }
     toast("已清空清单", "ok");
 });
 
 document.getElementById("btnBrowseCustom").addEventListener("click", async () => {
     const data = await getJSON(`${API}/pick_save?title=导出自定义清单&filename=modpack.json&ext=json`);
     if (data.path) document.getElementById("customPath").value = data.path;
-});
-
-document.getElementById("btnCustomExport").addEventListener("click", async () => {
-    const mods = state.customMods;
-    if (!mods.length) { toast("清单为空", "err"); return; }
-    const mc = document.getElementById("customMc").value.trim();
-    const loader = document.getElementById("customLoaderMeta").value;
-    let savePath = document.getElementById("customPath").value.trim();
-    if (!savePath) {
-        const data = await getJSON(`${API}/pick_save?title=导出自定义清单&filename=modpack.json&ext=json`);
-        if (!data.path) return;
-        savePath = data.path;
-        document.getElementById("customPath").value = savePath;
-    }
-    try {
-        const data = await postJSON(`${API}/export_json`, {
-            mods: mods.map(m => ({ project_id: m.project_id, name: m.custom_name || m.name, source: m.source || "modrinth" })),
-            game_version: mc,
-            loader,
-            save_path: savePath,
-        });
-        toast(`已导出 ${data.count} 个模组到：${data.save_path}`, "ok");
-    } catch (err) {
-        toast("导出失败：" + err.message, "err");
-    }
 });
 
 // ================================================================

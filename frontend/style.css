@@ -2646,4 +2646,79 @@ select.input {
 .c-arrow:hover { border-color: var(--primary); color: var(--primary); }
 .c-del:hover { border-color: #dc2626; color: #dc2626; }
 
+/* ================================================================ */
+/* V3.6：页面 I 迁移向导（复用 V2 向导样式）+ 页面 J 我的清单悬浮框 */
+/* ================================================================ */
+.page-head-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.page-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.btn-circle {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.btn-circle svg { width: 18px; height: 18px; }
+
+/* ---- 悬浮框尺寸与底部 ---- */
+.modal-wide { width: min(960px, 94vw); }
+.modal-narrow { width: min(520px, 92vw); }
+.modal-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 18px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-panel);
+}
+.modal-foot .mt-hint { flex: 1; min-width: 0; }
+
+/* ---- 添加悬浮框：搜索结果勾选行 ---- */
+.custom-search-results .cat-item {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    cursor: default;
+}
+.custom-search-results .cat-item:hover { border-left-color: var(--border); }
+.custom-search-results .cat-title { display: inline-flex; align-items: center; gap: 8px; }
+.c-sel {
+    width: 17px;
+    height: 17px;
+    accent-color: var(--primary);
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.c-sel:disabled { cursor: not-allowed; opacity: 0.5; }
+.c-deps {
+    margin-top: 5px;
+    font-size: 11.5px;
+    color: var(--text-mute);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.c-deps b { color: var(--ok); font-weight: 600; }
+.c-deps .chip { font-size: 11px; }
+.c-deps-tag { color: var(--text-mute); font-style: italic; }
+
+
 
