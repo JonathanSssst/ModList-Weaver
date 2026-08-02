@@ -91,6 +91,7 @@ jobs:
           & $iscc /DMyAppVersion=$Version installer.iss
           $Output = "output\$SetupName"
           if (-not (Test-Path $Output)) { Write-Error "安装包编译失败：$Output"; exit 1 }
+          Move-Item $Output -Destination ".\$SetupName" -Force
           "SETUP_NAME=$SetupName" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: 上传构建工件（Actions Artifact，每次都传）
@@ -183,7 +184,7 @@ jobs:
           fail_on_unmatched_files: true
           body_path: release_body.md
           generate_release_notes: true
-          update_existing_release: true
+          overwrite_files: true
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
