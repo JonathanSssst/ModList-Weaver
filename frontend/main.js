@@ -2187,7 +2187,6 @@ try {
             const open = idx === 0;
             const dateMatch = titleLine.match(/\((\d{4}-\d{2})\)/);
             const dateStr = dateMatch ? dateMatch[1] : "";
-            const open = idx === 0;
             return `
             <div class="cl-item cl-fold" data-open="${open ? 1 : 0}">
                 <div class="cl-head" role="button" title="点击展开/收起">
