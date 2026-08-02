@@ -2176,7 +2176,9 @@ try {
         const data = await resp.json();
         const md = data.content || "";
         if (!md.trim()) return;
-        const sections = md.split(/^##\s+/m).filter(s => s.trim());
+        const sections = md.split(/^##\s+/m)
+            .map(s => s.trim())
+            .filter(s => /^v?\d+\.\d+\.\d+/.test(s));
         clRoot.innerHTML = sections.map((sec, idx) => {
             const lines = sec.trim().split("\n");
             const titleLine = lines[0];
