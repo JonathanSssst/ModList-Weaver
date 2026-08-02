@@ -2185,13 +2185,20 @@ try {
             const releaseUrl = version ? `https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v${version}` : "";
             const rest = lines.slice(1).join("\n").trim();
             const open = idx === 0;
+            const dateMatch = titleLine.match(/\((\d{4}-\d{2})\)/);
+            const dateStr = dateMatch ? dateMatch[1] : "";
+            const isLatest = idx === 0;
             return `
             <div class="cl-item cl-fold" data-open="${open ? 1 : 0}">
                 <div class="cl-head" role="button" title="点击展开/收起">
-                    <span class="cl-ver">${version ? `<a href="${releaseUrl}" target="_blank" rel="noopener">v${version}</a>` : titleLine}</span>
-                    <span class="cl-fold-hint">${open ? '▾' : '▸'}</span>
+                    <span class="cl-ver">
+                        ${version ? `<a href="${releaseUrl}" target="_blank" rel="noopener">v${version}</a>` : ''}
+                        ${isLatest ? '<span class="ver-tag">最新</span>' : ''}
+                    </span>
+                    ${dateStr ? `<span class="cl-date">${dateStr}</span>` : ''}
+                    <span class="cl-fold-hint">▾</span>
                 </div>
-                ${rest ? `<div class="cl-fold-body">${renderMarkdown(rest)}</div>` : ''}
+                ${rest ? `<div class="cl-fold-body">${renderChangelogBody(rest)}</div>` : ''}
             </div>`;
         }).join("");
         clRoot.addEventListener("click", (e) => {
@@ -2201,20 +2208,42 @@ try {
             if (!item) return;
             const next = item.getAttribute("data-open") === "1" ? "0" : "1";
             item.setAttribute("data-open", next);
-            const hint = head.querySelector(".cl-fold-hint");
-            if (hint) hint.textContent = next === "1" ? "▾" : "▸";
         });
     } catch (_) {}
 })();
 
-function renderMarkdown(text) {
-    return text
-        .replace(/^###\s+(.+)$/gm, "<h4>$1</h4>")
-        .replace(/^##\s+(.+)$/gm, "<h3>$1</h3>")
-        .replace(/^- (.+)$/gm, "<li>$1</li>")
-        .replace(/\n\n/g, "</p><p>")
-        .replace(/^(?!<[hli])/gm, "<p>")
-        .replace(/(?<!<\/li>)\n/g, "<br>");
+function renderChangelogBody(text) {
+    let html = "";
+    let inList = false;
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) {
+            if (inList) { html += "</ul>"; inList = false; }
+            continue;
+        }
+        if (line.startsWith("### ")) {
+            if (inList) { html += "</ul>"; inList = false; }
+            html += `<h4>${escapeHtml(line.slice(4))}</h4>`;
+        } else if (line.startsWith("## ")) {
+            if (inList) { html += "</ul>"; inList = false; }
+            html += `<h3>${escapeHtml(line.slice(3))}</h3>`;
+        } else if (line.startsWith("- ")) {
+            if (!inList) { html += "<ul class=\"cl-list\">"; inList = true; }
+            html += `<li>${renderChangelogItem(line.slice(2))}</li>`;
+        } else {
+            if (inList) { html += "</ul>"; inList = false; }
+            html += `<p>${renderChangelogItem(line)}</p>`;
+        }
+    }
+    if (inList) { html += "</ul>"; }
+    return html;
+}
+
+function renderChangelogItem(text) {
+    return escapeHtml(text)
+        .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+        .replace(/`(.+?)`/g, "<code>$1</code>");
 }
     } catch (_) {}
 })();

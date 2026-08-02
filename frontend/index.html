@@ -900,22 +900,43 @@
                             <div class="changelog-section" id="changelogRoot">
                                 <div class="cl-item cl-fold" data-open="1">
                                     <div class="cl-head" role="button" title="点击展开/收起">
-                                        <span class="cl-ver">v3.3.1</span>
+                                        <span class="cl-ver">
+                                            <a href="https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v3.3.1" target="_blank" rel="noopener">v3.3.1</a>
+                                            <span class="ver-tag">最新</span>
+                                        </span>
+                                        <span class="cl-date">2026-08</span>
                                         <span class="cl-fold-hint">▾</span>
                                     </div>
-                                    <div class="cl-date">2026-08 · 最新正式版</div>
+                                    <div class="cl-fold-body">
+                                        <div class="cl-title">加载器匹配修正 · 更新日志本地化 · 界面优化</div>
+                                        <ul class="cl-list">
+                                            <li><b>【加载器匹配】</b>修复本地模组检查更新时加载器不对等的问题（Fabric 误匹配 Forge 版本），更新检测与下载均严格按选定加载器过滤。</li>
+                                            <li><b>【更新日志】</b>更新日志改为读取本地 CHANGELOG.md 文档，支持点击版本号跳转到对应 GitHub Release。</li>
+                                            <li><b>【界面优化】</b>移除面包屑左侧汉堡图标（折叠侧边栏仅由侧边栏下方按钮控制），优化模组列表页面高度减少滚动。</li>
+                                            <li><b>【兼容性提醒】</b>一键更新时提示模组版本之间可能存在兼容性问题。</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="cl-item cl-fold" data-open="0">
+                                    <div class="cl-head" role="button" title="点击展开/收起">
+                                        <span class="cl-ver">
+                                            <a href="https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v3.3.0" target="_blank" rel="noopener">v3.3.0</a>
+                                        </span>
+                                        <span class="cl-date">2026-08</span>
+                                        <span class="cl-fold-hint">▾</span>
+                                    </div>
                                     <div class="cl-fold-body">
                                         <div class="cl-title">一键更新已安装模组 · 本地 mods 目录管理</div>
                                         <ul class="cl-list">
                                             <li><b>【一键更新】</b>新增「本地模组」页：扫描本地 mods 目录后一键检查更新，批量下载最新适配版本并自动移除旧文件，原禁用模组更新后保持禁用状态。</li>
                                             <li><b>【本地目录管理】</b>支持启用 / 禁用（.disabled 后缀）/ 删除 / 打开源页面 / 查看详情，未识别模组标灰展示。</li>
-                                            <li><b>【更新任务】</b>任务中心新增「模组更新」任务类型，纳入队列 / 进度 / 结算 / 断点恢复体系。</li>
-                                            <li><b>【工程化】</b>新增 /api/manage_scan、/api/manage_mod、/api/download_updates 三个接口。</li>
-                                            <li><b>【测试】</b>新增 tests/test_manage_v33.py，pytest 全绿。</li>
+                                            <li><b>【更新任务】</b>任务中心新增「模组更新」任务类型，纳入队列 / 进度 / 结算 / 断点恢复体系，失败与缺失可在结算页重试。</li>
+                                            <li><b>【工程化】</b>scan_mods 支持 include_disabled 参数；新增 /api/manage_scan、/api/manage_mod、/api/download_updates 三个接口。</li>
+                                            <li><b>【测试】</b>新增 tests/test_manage_v33.py（本地管理接口 + 一键更新），pytest 全绿。</li>
                                         </ul>
                                     </div>
-                                 </div>
-                             </div>
+                                </div>
+                            </div>
                          </div>
                      </div>
                  </section>
