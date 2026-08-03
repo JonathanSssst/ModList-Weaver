@@ -1,6 +1,6 @@
 ; ModList-Weaver Inno Setup 安装包脚本
 ; 用法（本地）：
-;   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=3.4.0 installer.iss
+;   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=3.6.5 installer.iss
 ; 产物：output\ModList-Weaver-Windows-<版本>-setup.exe
 ; 说明：每用户安装（%LocalAppData%\ModList-Weaver），无需管理员权限；
 ;       app 的 settings/cache 存放在安装目录旁（backend.settings），可正常读写。

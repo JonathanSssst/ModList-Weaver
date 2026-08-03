@@ -1,5 +1,10 @@
 # ModList-Weaver 更新日志
 
+## v3.6.5 (2026-08)
+
+- 【搜索修复】模组列表 / 我的清单搜索框直接输入 project ID 无法命中：搜索接口不索引 project_id，现在普通搜索无结果时自动按 ID 精确解析——纯数字视为 CurseForge project_id，其余尝试 Modrinth slug / project_id（如输入 `238222` 直接命中 JEI、输入 `AANobbMI` 直接命中 Sodium）。
+- 【CurseForge 修复】社区镜像地址更新：原 `api.curse.tools/v1/tools/cf` 已失效（所有接口 404），改用 `api.curse.tools/v1`（搜索 / 详情 / 版本 / 指纹反查全量可用），CurseForge 源恢复。
+
 ## v3.6.4 (2026-08)
 
 - 【窗口】改为无边框（frameless）窗口 + 前端自定义标题栏：拖动标题栏移动窗口（仅标题栏可拖动，内容区不受影响）、双击标题栏最大化 / 还原、最小化 / 最大化 / 关闭按钮、窗口四边与四角拖拽调宽（带缩放光标提示）。

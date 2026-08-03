@@ -26,7 +26,9 @@ from .settings import get_settings
 USER_AGENT = "ModList-Weaver/3.0 (Minecraft mod migration desktop tool, CurseForge fallback source)"
 
 # 镜像基址：curse.tools 是长期运行的社区 CF 镜像（直连，无须 API Key）
-CURSETOOLS_BASE = "https://api.curse.tools/v1/tools/cf"
+# 官方文档推荐 drop-in 地址为 https://api.curse.tools/v1/cf，但该前缀下
+# /fingerprints 返回 405；基址 /v1 下所有接口（含 fingerprints）均可用，故用之。
+CURSETOOLS_BASE = "https://api.curse.tools/v1"
 # 分类常量：mods 类别 = 6（CurseForge Core）
 CF_CLASS_MODS = 6
 CF_CLASS_RESOURCEPACK = 12

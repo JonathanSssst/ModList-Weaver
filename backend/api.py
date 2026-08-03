@@ -61,12 +61,21 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.6.4"
+CURRENT_VERSION = "3.6.5"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.6.5",
+        "date": "2026-08",
+        "title": "搜索修复 · CurseForge 镜像更新",
+        "items": [
+            "【搜索修复】模组列表 / 我的清单搜索框直接输入 project ID 无法命中：搜索接口不索引 project_id，现在普通搜索无结果时自动按 ID 精确解析——纯数字视为 CurseForge project_id，其余尝试 Modrinth slug / project_id（如输入 238222 直接命中 JEI、输入 AANobbMI 直接命中 Sodium）。",
+            "【CurseForge 修复】社区镜像地址更新：原 api.curse.tools/v1/tools/cf 已失效（所有接口 404），改用 api.curse.tools/v1（搜索 / 详情 / 版本 / 指纹反查全量可用），CurseForge 源恢复。",
+        ],
+    },
     {
         "version": "3.6.4",
         "date": "2026-08",
@@ -935,17 +944,53 @@ async def api_search_mod(req: SearchRequest):
 
     req.source: "curseforge" 时走 CurseForge，否则（默认）走 Modrinth。
     query 可为空串：配合 loader / project_type 筛选时用于分页浏览模组目录。
+
+    精确搜索兜底：搜索接口不索引 project_id，直接输入 ID 会返回空结果；
+    因此当普通搜索无命中时，额外按 project_id / slug 精确解析——
+    纯数字视为 CurseForge project_id，其余尝试 Modrinth slug / project_id。
     """
+    query = (req.query or "").strip()
     source = (req.source or "modrinth").lower()
+
+    async def _exact_hit():
+        """按 project ID / slug 精确解析单条结果，返回 hit dict 或 None"""
+        try:
+            if query.isdigit():
+                proj = await cf_client.get_project(int(query))
+                return proj if proj else None
+            proj = await client.get_project(query)
+            if not proj:
+                return None
+            return {
+                "project_id": proj.get("id"),
+                "slug": proj.get("slug"),
+                "title": proj.get("title"),
+                "description": proj.get("description") or "",
+                "icon_url": proj.get("icon_url"),
+                "categories": proj.get("categories") or [],
+                "loaders": proj.get("loaders") or [],
+                "downloads": proj.get("downloads") or 0,
+                "followers": proj.get("followers") or 0,
+                "source": "modrinth",
+            }
+        except (ModrinthError, CurseForgeError):
+            return None
+
     try:
         if source == "curseforge":
             data = await cf_client.search_mods(
-                req.query or "", req.game_version, req.loader, req.limit, req.offset, req.project_type)
+                query, req.game_version, req.loader, req.limit, req.offset, req.project_type)
         else:
             data = await client.search_mods(
-                req.query or "", req.game_version, req.loader, req.limit, req.offset, req.project_type)
+                query, req.game_version, req.loader, req.limit, req.offset, req.project_type)
     except (ModrinthError, CurseForgeError) as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+    if query and not (data.get("hits") or []):
+        exact = await _exact_hit()
+        if exact:
+            return {"hits": [exact], "offset": 0, "limit": req.limit, "total_hits": 1}
+
     return data
 
 

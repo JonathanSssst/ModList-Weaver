@@ -2,7 +2,7 @@
 
 > Minecraft 双源（Modrinth / CurseForge）模组迁移桌面工具 —— 一键扫描本地 mods，导出模组清单，跨版本/跨加载器批量重下载，自带断点续传、哈希校验、依赖递归与任务队列。
 
-当前版本：**v3.6.4** · 平台：Windows x64（PyInstaller 打包 + Inno Setup 安装包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
+当前版本：**v3.6.5** · 平台：Windows x64（PyInstaller 打包 + Inno Setup 安装包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
 
 ---
 
@@ -74,7 +74,7 @@ pyinstaller build.spec
 # 产物位于 dist/ModList-Weaver/
 
 # （可选）编译 Inno Setup 安装包（需已安装 Inno Setup 6）
-# "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=3.6.4 installer.iss
+# "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=3.6.5 installer.iss
 # 产物位于 output/
 ```
 
@@ -420,6 +420,11 @@ project.source 字段优先级最高
 ## 版本历史
 
 完整 Changelog 在软件内「更新日志」页动态渲染（数据源：`backend/api.py:CHANGELOG`）。
+
+### v3.6.5（2026-08）· 搜索修复 · CurseForge 镜像更新
+
+- **project ID 精确搜索**：模组列表 / 我的清单搜索框直接输入 project ID 无法命中——搜索接口不索引 project_id。现在普通搜索无结果时自动按 ID 精确解析：纯数字视为 CurseForge project_id，其余尝试 Modrinth slug / project_id（输入 `238222` 直接命中 JEI、输入 `AANobbMI` 直接命中 Sodium）。
+- **CurseForge 镜像更新**：社区镜像原地址 `api.curse.tools/v1/tools/cf` 已失效（全部 404），改用 `api.curse.tools/v1`（搜索 / 详情 / 版本 / 指纹反查全量可用），CurseForge 源恢复。
 
 ### v3.6.4（2026-08）· 无边框窗口 · 自定义标题栏
 
