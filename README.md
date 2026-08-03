@@ -2,7 +2,7 @@
 
 > Minecraft 双源（Modrinth / CurseForge）模组迁移桌面工具 —— 一键扫描本地 mods，导出模组清单，跨版本/跨加载器批量重下载，自带断点续传、哈希校验、依赖递归与任务队列。
 
-当前版本：**v3.4.0** · 平台：Windows x64（PyInstaller 打包 + Inno Setup 安装包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
+当前版本：**v3.6.3** · 平台：Windows x64（PyInstaller 打包 + Inno Setup 安装包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
 
 ---
 
@@ -64,7 +64,7 @@ pip install pytest pytest-asyncio
 python -m pytest tests -v --tb=short
 ```
 
-预期输出：39 个用例全部 PASS。
+预期输出：53 个用例全部 PASS。
 
 ### 本地打包
 
@@ -74,7 +74,7 @@ pyinstaller build.spec
 # 产物位于 dist/ModList-Weaver/
 
 # （可选）编译 Inno Setup 安装包（需已安装 Inno Setup 6）
-# "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=3.4.0 installer.iss
+# "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=3.6.3 installer.iss
 # 产物位于 output/
 ```
 
@@ -89,8 +89,11 @@ pyinstaller build.spec
 | `max_concurrency` | `3` | 同时运行的最大下载任务数 |
 | `rate_limit_mbps` | `0` | 全局下行带宽限制（MB/s），`0` 表示不限速 |
 | `theme` | `auto` | 界面主题：`auto` / `light` / `dark` |
+| `accent` | `default` | 强调色：`default`（默认蓝）/ `green`（护眼绿）/ `indigo`（靛蓝） |
+| `contrast` | `normal` | 对比度：`normal` / `high`（高对比） |
 | `source` | `auto` | 下载源偏好：`auto`（先 Modrinth 后 CurseForge）/ `modrinth` / `curseforge` |
 | `curseforge_api_key` | `""` | 可选 CurseForge 官方 API Key；为空时走 `api.curse.tools` 公共镜像 |
+| `man_folder` | `""` | 「我的清单」页记忆的上次 mods 目录，重开自动恢复 |
 
 > 主题、下载源、并发数、限速等设置即时生效，无需重启。
 
@@ -149,6 +152,32 @@ pyinstaller build.spec
 - 设置页「存储与清理」：一键清空任务日志、导入临时文件、历史记录并统计占用
 - 需在浏览器 / WebView 中允许桌面通知权限
 
+### 9. 本地模组管理 · 一键更新（V3.3 / V3.7）
+
+- 「本地模组管理」页（E）扫描本地 mods 目录（支持 `.jar.disabled` 禁用文件），按文件哈希反查识别
+- 启用 / 禁用（`.disabled` 后缀）/ 删除 / 打开源页面 / 查看详情，未识别模组标灰展示
+- 一键检查更新：按目标版本 / 加载器批量下载最新适配版本并自动移除旧文件，原禁用模组更新后保持禁用状态
+- 两步向导化（选择目录 → 已安装模组列表），记住上次目录，重开应用自动恢复并自动扫描
+- 扫描耗时较长时，「开始扫描」按钮底边显示实时进度条（轮询 `/api/scan_progress`）
+
+### 10. 模组迁移（V3.5 / V3.6）
+
+- 四步向导：扫描源目录 → 勾选模组 → 目标配置 → 确认迁移
+- 跳过导出清单环节，直接按目标版本 / 加载器批量下载到新目录
+
+### 11. 我的清单（V3.6）
+
+- 自定义模组包页重构为「我的清单」：搜索添加 / 移除模组、自定义文件名与顺序
+- 添加模组时自动读取并附带必需前置依赖（去重），确认提示区分已附带的前置数量
+- 导出为与标准清单同格式的 JSON
+
+### 12. 配色主题与界面体验（V3.6 / V3.7）
+
+- 明暗主题 + 3 套强调色（默认蓝 / 护眼绿 / 靛蓝）+ 标准 / 高对比两档，设置页切换并持久化
+- 任务中心实时进度：运行中 / 排队中 / 已完成数量实时更新，新增「整体进度」卡（加权总进度 / 累计网速 / 文件数 / ETA）
+- 耗时操作为按钮增加 spinner，列表加载展示骨架屏占位
+- 详情页：前置依赖卡片、可折叠版本日志、作者角色标签、来源链接（GitHub / Modrinth / CurseForge / MC百科）、版本依赖下拉切换
+
 ---
 
 ## 技术栈
@@ -162,7 +191,7 @@ pyinstaller build.spec
 | 模组元数据解析 | zipfile + tomllib（无需 Java 环境） |
 | 哈希算法 | hashlib（sha512 / sha1）+ 自实现 Java 兼容 MurmurHash2 |
 | 打包 | PyInstaller（目录模式 COLLECT） |
-| 测试 | pytest + pytest-asyncio（39 用例） |
+| 测试 | pytest + pytest-asyncio（53 用例） |
 | CI/CD | GitHub Actions（2 OS × 3 Python 矩阵 + 自动 Release） |
 
 ---
@@ -186,9 +215,9 @@ ModList-Weaver/
 │   └── settings.py             # 全局设置 + 令牌桶限速器
 │
 ├── frontend/                   # 前端：原生 HTML/CSS/JS
-│   ├── index.html              # 单页应用外壳 + 8 个页面 (A~H)
+│   ├── index.html              # 单页应用外壳 + 页面（导出 A / 导入 B / 迁移 I / 我的清单 J / 模组列表 C / 本地模组 E / 任务中心 D / 详情 / 设置 H / 关于 F）
 │   ├── main.js                 # 交互逻辑（侧边栏 / 向导 / 轮询 / 主题）
-│   └── style.css               # 明暗主题样式
+│   └── style.css               # 明暗主题 + 强调色 / 高对比样式
 │
 ├── assets/                      # 应用图标（app.ico / app.png，打包用）
 │
@@ -198,7 +227,8 @@ ModList-Weaver/
 │   ├── test_downloader_logic.py# 版本选择 / TaskGate / 限速器 / 哈希策略
 │   ├── test_curseforge_and_settings.py  # murmur2 / Settings 持久化
 │   ├── test_resume_and_updates.py      # 断点恢复 / 版本比较 / 更新检测 / 清单导入
-│   └── test_qol_v32.py                # 源页面跳转 / 存储统计与清理（V3.2）
+│   ├── test_qol_v32.py                # 源页面跳转 / 存储统计与清理（V3.2）
+│   └── test_manage_v33.py              # 本地管理接口 / 一键更新（V3.3）
 │
 ├── .github/workflows/ci.yml    # GitHub Actions：测试矩阵 + 打包 + Release
 ├── .gitignore
@@ -221,14 +251,33 @@ ModList-Weaver/
 | --- | --- | --- |
 | GET | `/api/version` | 当前版本 + 完整 Changelog + Release 下载链接 |
 | GET | `/api/mc_versions` | Minecraft 官方版本列表（6 小时缓存） |
+| GET | `/api/changelog` | 本地 CHANGELOG.md 文档（更新日志页渲染） |
+| GET | `/api/check_app_update` | 检查应用更新（GitHub Releases） |
 
 ### 扫描与导出
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | `/api/scan_mods` | 扫描 mods 目录，多源哈希反查 project_id |
+| GET | `/api/scan_progress` | 轮询扫描进度（done / total / phase） |
 | POST | `/api/export_json` | 生成 modlist.json 并保存 |
 | POST | `/api/preview_list` | 解析 modlist.json 返回清单（下载前勾选用） |
+| POST | `/api/import_modlist` | 导入 modlist.json 内容到临时文件 |
+
+### 本地模组管理与一键更新（V3.3）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/manage_scan` | 扫描本地 mods 目录（含 `.jar.disabled` 禁用文件） |
+| POST | `/api/manage_mod` | 本地 mod 管理：启用 / 禁用 / 删除 |
+| POST | `/api/check_updates` | 按目标版本 / 加载器检测可更新模组 |
+| POST | `/api/download_updates` | 批量下载更新（含旧文件清理） |
+
+### 模组迁移（V3.5）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/migrate_mods` | 迁移：扫描源目录 → 按目标版本 / 加载器批量下载到新目录 |
 
 ### 搜索与详情
 
@@ -236,6 +285,7 @@ ModList-Weaver/
 | --- | --- | --- |
 | POST | `/api/search_mod` | 关键词搜索模组（支持 `source` 切换双源） |
 | GET | `/api/project/{id}` | 模组详情：图标 / 作者 / 版本列表 / 更新日志 |
+| POST | `/api/reverse_deps` | 反依赖（后置）分析 |
 | GET | `/api/project_page` | 模组主页 URL（「打开源页面」用，V3.2） |
 
 ### 下载
@@ -311,12 +361,47 @@ ModList-Weaver/
 
 ### C. 模组列表
 
-关键词搜索 + 双源切换 + 分页浏览 + 模组详情页（图标 / 版本 / 作者 / 更新日志）+ 一键单模组下载（含前置依赖）。
+关键词搜索 + 双源切换 + 分页浏览 + 模组详情页（图标 / 版本 / 作者 / 更新日志 / 前置依赖与反依赖）+ 一键单模组下载（含前置依赖）。
 
 ### D. 任务中心
 
 - 进行中任务：双进度条 + 实时网速 + 暂停 / 继续 / 停止 / 删除
+- 实时汇总：运行中 / 排队中 / 已完成数量 + 「整体进度」卡（按文件加权的总进度、累计网速、文件数、预计剩余时间）
 - 已完成任务：持久化历史 + 查看日志 / 导出日志 + 重试 + 打开目录
+
+### E. 本地模组管理
+
+```
+扫描本地 mods 目录（含 .jar.disabled 禁用文件）
+   ↓
+哈希反查识别 → 列表展示（已启用 / 已禁用 / 未识别）
+   ↓
+启用 · 禁用 · 删除 · 查看详情 · 打开源页面
+   ↓
+一键检查更新（目标版本 / 加载器）→ 批量下载并自动移除旧文件
+```
+
+### F. 模组迁移（四步向导）
+
+```
+选择旧版本 mods 源目录 → 扫描
+   ↓
+勾选要迁移的模组
+   ↓
+目标 MC 版本 + 加载器 + 新目录
+   ↓
+批量下载（跳过导出清单环节）
+```
+
+### G. 我的清单
+
+```
+搜索添加 / 移除模组（自动附带必需前置依赖）
+   ↓
+自定义文件名与顺序
+   ↓
+导出与标准清单同格式的 JSON
+```
 
 ### 多源下载路由策略
 
@@ -334,6 +419,38 @@ project.source 字段优先级最高
 ## 版本历史
 
 完整 Changelog 在软件内「更新日志」页动态渲染（数据源：`backend/api.py:CHANGELOG`）。
+
+### v3.6.3（2026-08）· 扫描进度显示 · 本地目录记忆修复
+
+- **扫描进度**：扫描目录耗时较长时，「开始扫描」按钮底边显示实时进度条（轮询 `/api/scan_progress`），配合按钮 spinner 与骨架屏，扫描过程不再毫无反馈。
+- **目录记忆修复**：本地模组目录改为持久化到后端 `cache/settings.json`（原 localStorage 在部分环境重启即丢失），重开应用自动恢复上次目录并自动扫描。
+
+### v3.6.2（2026-08）· 任务中心实时进度 · 我的清单向导化 · 配色主题 · 骨架屏加载
+
+- **任务中心**：运行中 / 排队中 / 已完成数量实时更新，新增「整体进度」卡（按文件加权的总进度、累计网速、文件数与预计剩余时间）。
+- **我的清单**：改为两步向导（选择 mods 目录 → 已安装模组列表），记住上次使用的目录，步骤指示条可点击切换。
+- **主题**：新增 3 套强调色（默认蓝 / 护眼绿 / 靛蓝）与「标准 / 高对比」对比度选项，设置页切换并自动保存。
+- **加载体验**：耗时操作为按钮增加 spinner，列表加载展示骨架屏占位，避免界面闪烁。
+- **界面**：导出 / 导入 / 迁移 / 我的清单四页统计卡统一改为紧凑胶囊样式。
+
+### v3.6.1（2026-08）· 我的清单页风格统一 · 详情页重写 · 版本依赖选择
+
+- **我的清单**：清空 / 导出 / 添加三按钮统一等高带图标，数量统计卡改紧凑胶囊。
+- **详情页**：重写布局——前置依赖卡片提前展示、版本日志可折叠、作者角色标签移除、新增来源链接（GitHub / Modrinth / CurseForge / MC百科）。
+- **前置依赖**：新增版本下拉框，可切换查看不同版本的依赖；下载入口移入主信息栏。
+- **模组列表**：头部结果数 / 当前页统计卡改为紧凑横排。
+
+### v3.6.0（2026-08）· 迁移向导化 · 我的清单悬浮框
+
+- **模组迁移**：改为四步向导（扫描源目录 → 勾选模组 → 目标配置 → 确认迁移）。
+- **我的清单**：原「自定义模组包」页重命名，添加模组时自动附带必需前置依赖（去重），导出改为悬浮框。
+
+### v3.5.0（2026-08）· 页面重构 · 模组迁移 · 自定义模组包 · 详情页依赖分析
+
+- **菜单重构**：侧边栏改为「导出」「导入」命名并移除字母角标；新增「模组迁移」「自定义模组包」两个页面。
+- **模组迁移**：扫描源目录后直接按目标版本 / 加载器批量下载到新目录，跳过导出清单步骤。
+- **自定义模组包**：搜索添加 / 移除模组，自定义文件名与顺序，导出与标准清单同格式 JSON。
+- **详情页**：新增前置依赖展示（点击跳转依赖详情）与反依赖分析；作者按角色标注；返回逻辑回到来源页面。
 
 ### v3.4.0（2026-08）· 发布安装包 · 便携版整理为单文件夹
 

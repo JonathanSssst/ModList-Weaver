@@ -61,12 +61,21 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.6.2"
+CURRENT_VERSION = "3.6.3"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.6.3",
+        "date": "2026-08",
+        "title": "扫描进度显示 · 本地目录记忆修复",
+        "items": [
+            "【扫描进度】扫描 mods 目录时「开始扫描」按钮底边显示实时进度条（轮询 /api/scan_progress，分阶段 files / modrinth / curseforge / done），配合按钮 spinner 与骨架屏，扫描过程不再毫无反馈。",
+            "【目录记忆】本地模组目录改由后端 cache/settings.json 持久化（原 localStorage 在部分环境重启即丢失），重开应用自动恢复上次目录并自动扫描。",
+        ],
+    },
     {
         "version": "3.6.2",
         "date": "2026-08",
@@ -495,6 +504,7 @@ class SettingsUpdateRequest(BaseModel):
     contrast: Optional[str] = None    # V3.7：对比度（normal / high）
     source: Optional[str] = None          # V3.0：下载源偏好
     curseforge_api_key: Optional[str] = None  # V3.0：CurseForge 官方 API Key（可选）
+    man_folder: Optional[str] = None  # V3.7：我的清单页记忆的 mods 目录
 
 
 class PreviewRequest(BaseModel):
@@ -583,13 +593,15 @@ async def api_scan_mods(req: ScanRequest):
     if not req.folder or not Path(req.folder).is_dir():
         raise HTTPException(status_code=400, detail=f"目录不存在: {req.folder}")
     try:
-        results = await scan_mods(req.folder, client, cf_client)
+        results = await scan_mods(req.folder, client, cf_client, progress_cb=_scan_progress_cb(req.folder))
     except FileNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except (ModrinthError, CurseForgeError) as e:
         raise HTTPException(status_code=502, detail=f"下载源 API 错误: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"扫描失败: {e}")
+    finally:
+        _scan_progress_reset()
 
     matched = sum(1 for r in results if r["matched"])
     return {
@@ -609,13 +621,15 @@ async def api_manage_scan(req: ScanRequest):
     if not req.folder or not Path(req.folder).is_dir():
         raise HTTPException(status_code=400, detail=f"目录不存在: {req.folder}")
     try:
-        results = await scan_mods(req.folder, client, cf_client, include_disabled=True)
+        results = await scan_mods(req.folder, client, cf_client, include_disabled=True, progress_cb=_scan_progress_cb(req.folder))
     except FileNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except (ModrinthError, CurseForgeError) as e:
         raise HTTPException(status_code=502, detail=f"下载源 API 错误: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"扫描失败: {e}")
+    finally:
+        _scan_progress_reset()
 
     matched = sum(1 for r in results if r["matched"])
     return {
@@ -624,6 +638,32 @@ async def api_manage_scan(req: ScanRequest):
         "unmatched": len(results) - matched,
         "mods": results,
     }
+
+
+# 扫描进度：前端轮询 /api/scan_progress 获取实时进度（按目录区分）
+_scan_state = {"active": False, "folder": "", "done": 0, "total": 0, "phase": ""}
+
+
+def _scan_progress_cb(folder):
+    _scan_state.update(active=True, folder=folder, done=0, total=0, phase="files")
+
+    async def _cb(done, total, phase):
+        _scan_state.update(done=done, total=total, phase=phase)
+
+    return _cb
+
+
+def _scan_progress_reset():
+    _scan_state.update(active=False, folder="", done=0, total=0, phase="")
+
+
+@app.get("/api/scan_progress")
+async def api_scan_progress(folder: str = ""):
+    """读取指定目录的扫描进度（active / done / total / phase）"""
+    s = _scan_state
+    if s["active"] and folder and s["folder"] == folder:
+        return {"active": True, "done": s["done"], "total": s["total"], "phase": s["phase"]}
+    return {"active": False, "done": 0, "total": 0, "phase": ""}
 
 
 @app.post("/api/manage_mod")
@@ -1269,6 +1309,8 @@ def api_update_settings(req: SettingsUpdateRequest):
         patch["source"] = req.source
     if req.curseforge_api_key is not None:
         patch["curseforge_api_key"] = req.curseforge_api_key
+    if req.man_folder is not None:
+        patch["man_folder"] = req.man_folder
     if not patch:
         raise HTTPException(status_code=400, detail="没有需要更新的设置项")
     get_settings().update(patch)

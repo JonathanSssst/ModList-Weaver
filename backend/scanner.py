@@ -105,7 +105,7 @@ def parse_jar_metadata(jar_path):
     return info
 
 
-async def scan_mods(folder, client, cf_client=None, log_cb=None, include_disabled=False):
+async def scan_mods(folder, client, cf_client=None, log_cb=None, include_disabled=False, progress_cb=None):
     """扫描 mods 目录，解析元数据并通过多平台哈希反查 project_id
 
     匹配顺序（符合 settings.source=auto 行为）：
@@ -117,6 +117,7 @@ async def scan_mods(folder, client, cf_client=None, log_cb=None, include_disable
     :param cf_client: 可选 CurseForgeClient 实例
     :param log_cb: 可选异步日志回调 async cb(msg)
     :param include_disabled: 是否包含 *.jar.disabled（已禁用）文件（V3.3 本地管理用）
+    :param progress_cb: 可选异步进度回调 async cb(done, total, phase)，phase ∈ files/modrinth/curseforge/done
     :return: 模组信息列表
     """
     folder_path = Path(folder)
@@ -134,7 +135,7 @@ async def scan_mods(folder, client, cf_client=None, log_cb=None, include_disable
         return []
 
     results = []
-    for jar in jar_files:
+    for i, jar in enumerate(jar_files, 1):
         meta = parse_jar_metadata(jar)
         sha512 = compute_sha512(jar)
         murmur2 = None
@@ -163,11 +164,15 @@ async def scan_mods(folder, client, cf_client=None, log_cb=None, include_disable
         })
         if log_cb:
             await log_cb(f"扫描文件: {jar.name}")
+        if progress_cb:
+            await progress_cb(i, len(jar_files), "files")
 
     # 第 1 步：Modrinth sha512 批量反查
     hashes = [r["sha512"] for r in results]
     if log_cb:
         await log_cb(f"正在向 Modrinth 反查 {len(hashes)} 个 sha512 哈希...")
+    if progress_cb:
+        await progress_cb(0, 0, "modrinth")
     mapping = {}
     try:
         mapping = await client.get_files_by_hashes(hashes, "sha512")
@@ -195,6 +200,8 @@ async def scan_mods(folder, client, cf_client=None, log_cb=None, include_disable
             cf_fp_list = [m for m, _ in cf_candidates]
             if log_cb:
                 await log_cb(f"正在向 CurseForge 反查 {len(cf_fp_list)} 个 murmur2 指纹...")
+            if progress_cb:
+                await progress_cb(0, 0, "curseforge")
             try:
                 cf_map = await cf_client.get_files_by_fingerprints(cf_fp_list)
             except Exception as e:
@@ -212,5 +219,8 @@ async def scan_mods(folder, client, cf_client=None, log_cb=None, include_disable
                     r["version_number"] = hit.get("version_number")
                     r["game_versions"] = hit.get("game_versions", [])
                     r["loaders"] = hit.get("loaders", [])
+
+    if progress_cb:
+        await progress_cb(len(results), max(1, len(results)), "done")
 
     return results

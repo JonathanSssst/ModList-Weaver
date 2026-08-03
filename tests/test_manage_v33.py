@@ -86,7 +86,7 @@ def test_manage_scan_includes_disabled(monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
     from backend import api as api_mod
 
-    async def fake_scan(folder, client, cf_client=None, log_cb=None, include_disabled=False):
+    async def fake_scan(folder, client, cf_client=None, log_cb=None, include_disabled=False, progress_cb=None):
         assert include_disabled is True
         return [
             {"filename": "a.jar", "path": str(tmp_path / "a.jar"), "disabled": False,

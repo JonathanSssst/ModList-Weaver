@@ -62,6 +62,27 @@ function setBtnBusy(btn, busy) {
     btn.disabled = busy;
 }
 
+// 扫描进度（V3.7）：按钮底边进度条 + 轮询 /api/scan_progress
+function setBtnProgress(btn, pct) {
+    if (btn) btn.style.setProperty("--pct", Math.max(0, Math.min(100, pct)));
+}
+let scanPollTimer = null;
+function startScanProgress(folder, btn) {
+    stopScanProgress(btn);
+    if (btn) btn.classList.add("is-progress");
+    scanPollTimer = setInterval(async () => {
+        try {
+            const r = await getJSON(`${API}/scan_progress?folder=${encodeURIComponent(folder)}`);
+            const pct = (r && r.active && r.total) ? Math.round(r.done / r.total * 100) : 0;
+            setBtnProgress(btn, pct);
+        } catch (_) {}
+    }, 500);
+}
+function stopScanProgress(btn) {
+    if (scanPollTimer) { clearInterval(scanPollTimer); scanPollTimer = null; }
+    if (btn) { btn.classList.remove("is-progress"); setBtnProgress(btn, 0); }
+}
+
 // 列表骨架屏占位（V3.7）
 function showSkeleton(boxId, rows) {
     const box = document.getElementById(boxId);
@@ -277,6 +298,7 @@ function savePref(mc, loader, saveDir) {
 function saveManFolder(folder) {
     pref.manFolder = folder || "";
     try { localStorage.setItem("mlw_pref", JSON.stringify(pref)); } catch (_) {}
+    try { postJSON(`${API}/settings`, { man_folder: pref.manFolder }); } catch (_) {}
 }
 const LOADER_LABELS = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge", quilt: "Quilt" };
 
@@ -561,6 +583,7 @@ document.getElementById("btnScan").addEventListener("click", async () => {
     showSkeleton("modList", 5);
     setStatus("扫描中…", "busy");
     toast("正在扫描模组并反查 Modrinth…");
+    startScanProgress(folder, btn);
     try {
         const data = await postJSON(`${API}/scan_mods`, { folder });
         state.scannedMods = (data.mods || []).map((m, i) => Object.assign(m, { _idx: i, selected: false }));
@@ -575,6 +598,7 @@ document.getElementById("btnScan").addEventListener("click", async () => {
         toast("扫描失败：" + e.message, "err");
     } finally {
         setBtnBusy(btn, false);
+        stopScanProgress(btn);
     }
 });
 
@@ -1449,6 +1473,7 @@ async function scanInstalledMods() {
     setBtnBusy(btn, true);
     showSkeleton("manList", 5);
     setStatus("扫描中…", "busy");
+    startScanProgress(folder, btn);
     try {
         const data = await postJSON(`${API}/manage_scan`, { folder });
         state.manMods = (data.mods || []).map((m, i) => Object.assign(m, { _idx: i, selected: false }));
@@ -1463,6 +1488,7 @@ async function scanInstalledMods() {
         if (cnt) cnt.textContent = "";
         renderManList();
         saveManFolder(folder);
+        if (state.manMods.length) showManStep(2, true);
         setStatus("就绪");
         toast(`扫描完成：${data.matched}/${data.total} 已识别`, "ok");
     } catch (e) {
@@ -1470,6 +1496,7 @@ async function scanInstalledMods() {
         toast("扫描失败：" + e.message, "err");
     } finally {
         setBtnBusy(btn, false);
+        stopScanProgress(btn);
     }
 }
 
@@ -2340,6 +2367,11 @@ async function loadSettings() {
         if (src) src.value = s.source || "auto";
         const cfk = document.getElementById("setCfKey");
         if (cfk) cfk.value = s.curseforge_api_key || "";
+        if (s.man_folder) {
+            pref.manFolder = s.man_folder;
+            const mf = document.getElementById("manFolder");
+            if (mf && !mf.value) mf.value = s.man_folder;
+        }
         if (s.theme) applyTheme(s.theme);
         const saved = document.getElementById("settingsSaved");
         if (saved) saved.textContent = "";

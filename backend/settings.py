@@ -17,6 +17,7 @@ DEFAULT_SETTINGS = {
     "contrast": "normal",   # 对比度：normal / high（V3.7）
     "source": "auto",       # 下载源：modrinth / curseforge / auto（自动匹配：先 Modrinth 再 CurseForge）
     "curseforge_api_key": "",  # 可选 CurseForge 官方 API Key；为空时走 curse.tools 公共镜像
+    "man_folder": "",       # 我的清单页上次使用的 mods 目录（V3.7）
 }
 
 SETTINGS_FILE = "settings.json"
