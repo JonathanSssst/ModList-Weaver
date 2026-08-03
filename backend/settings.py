@@ -13,6 +13,8 @@ DEFAULT_SETTINGS = {
     "max_concurrency": 3,   # 同时运行的最大下载任务数
     "rate_limit_mbps": 0,   # 网速限制（MB/s），0 表示不限速
     "theme": "auto",        # auto / light / dark（前端偏好）
+    "accent": "default",    # 配色：default / green / indigo（V3.7）
+    "contrast": "normal",   # 对比度：normal / high（V3.7）
     "source": "auto",       # 下载源：modrinth / curseforge / auto（自动匹配：先 Modrinth 再 CurseForge）
     "curseforge_api_key": "",  # 可选 CurseForge 官方 API Key；为空时走 curse.tools 公共镜像
 }

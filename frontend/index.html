@@ -202,7 +202,7 @@
                 <section class="page active" id="pageA">
                     <div class="page-head">
                         <div>
-                            <h2 class="page-title">扫描模组 &amp; 导出清单</h2>
+                            <h2 class="page-title">导出</h2>
                         </div>
                         <div class="page-stats" id="scanStat">
                             <div class="stat-card stat-total">
@@ -362,7 +362,7 @@
                 <section class="page" id="pageB">
                     <div class="page-head">
                         <div>
-                            <h2 class="page-title">导入 JSON 清单 · 批量下载</h2>
+                            <h2 class="page-title">导入</h2>
                         </div>
                     </div>
 
@@ -531,8 +531,7 @@
                 <section class="page" id="pageI">
                     <div class="page-head">
                         <div>
-                            <h2 class="page-title">模组迁移</h2>
-                            <p class="page-desc">扫描旧版本 mods 目录，勾选后按目标版本 / 加载器直接迁移下载到新目录，无需先导出清单。</p>
+                            <h2 class="page-title">迁移</h2>
                         </div>
                         <div class="page-stats" id="migStat">
                             <div class="stat-card stat-total">
@@ -1050,7 +1049,7 @@
                     </div>
                 </section>
 
-                <!-- ==================== 页面 E：本地模组管理（V3.3） ==================== -->
+                <!-- ==================== 页面 E：本地模组管理（V3.3，V3.7 流程式向导） ==================== -->
                 <section class="page" id="pageE">
                     <div class="page-head">
                         <div>
@@ -1076,75 +1075,102 @@
                         </div>
                     </div>
 
-                    <div class="card">
-                        <div class="card-head">
-                            <div class="ch-title"><span class="ch-step">1</span> 选择 mods 目录并扫描</div>
+                    <!-- 步骤指示器 -->
+                    <div class="wizard" id="manWizardSteps">
+                        <div class="wstep active" data-step="1">
+                            <span class="ws-num">1</span>
+                            <div class="ws-label"><b>选择目录并扫描</b><small>选择本地 mods 目录</small></div>
                         </div>
-                        <div class="card-body">
-                            <div class="form-row form-row-grid">
-                                <div class="form-field form-field-2col">
-                                    <label>mods 目录路径</label>
-                                    <div class="input-group">
-                                        <input type="text" id="manFolder" class="input" placeholder="选择本地 mods 目录（支持 .disabled 禁用文件）" />
-                                        <button class="btn btn-outline" id="btnBrowseMan">浏览文件夹</button>
-                                    </div>
-                                </div>
-                                <div class="form-field">
-                                    <label>目标游戏版本（更新用）</label>
-                                    <input type="text" id="manMc" class="input" list="mcVersionsList" placeholder="如 1.21.1" />
-                                </div>
-                                <div class="form-field">
-                                    <label>目标加载器</label>
-                                    <select id="manLoader" class="input">
-                                        <option value="fabric">Fabric</option>
-                                        <option value="forge">Forge</option>
-                                        <option value="neoforge">NeoForge</option>
-                                        <option value="quilt">Quilt</option>
-                                    </select>
-                                </div>
-                                <div class="form-field form-field-actions">
-                                    <button class="btn btn-primary" id="btnManScan">扫描目录</button>
-                                </div>
-                            </div>
+                        <div class="ws-line"></div>
+                        <div class="wstep" data-step="2">
+                            <span class="ws-num">2</span>
+                            <div class="ws-label"><b>已安装模组</b><small>管理 / 检查更新 / 一键更新</small></div>
                         </div>
                     </div>
 
-                    <div class="card">
-                        <div class="card-head">
-                            <div class="ch-title"><span class="ch-step">2</span> 已安装模组</div>
-                            <span class="ch-hint" id="manInfo">—</span>
-                        </div>
-                        <div class="card-body">
-                            <div class="mod-toolbar">
-                                <div class="mt-left">
-                                    <button class="btn btn-outline btn-sm" id="btnManAll">全选</button>
-                                    <button class="btn btn-outline btn-sm" id="btnManNone">清空</button>
-                                    <button class="btn btn-outline btn-sm" id="btnManInvert">反选</button>
-                                    <button class="btn btn-outline btn-sm" id="btnManDisable">禁用选中</button>
-                                    <button class="btn btn-outline btn-sm" id="btnManEnable">启用选中</button>
-                                    <button class="btn btn-outline btn-sm btn-danger" id="btnManDelete">删除选中</button>
-                                    <span class="mt-hint">已选 <b id="manSelCount">0</b> / <span id="manSelTotal">0</span></span>
-                                </div>
-                                <div class="mt-right">
-                                    <button class="btn btn-outline btn-sm" id="btnManCheckUpdates" title="检测已识别模组是否有新版本">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
-                                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                                        </svg>
-                                        检查更新
-                                    </button>
-                                    <button class="btn btn-primary btn-sm" id="btnManUpdate" disabled>一键更新</button>
-                                    <span class="mt-hint" id="manUpdateCount"></span>
+                    <!-- 步骤 1：选择目录并扫描 -->
+                    <div class="wizard-view active" id="m-step-scan">
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">1</span> 选择 mods 目录并扫描</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-row form-row-grid">
+                                    <div class="form-field form-field-2col">
+                                        <label>mods 目录路径</label>
+                                        <div class="input-group">
+                                            <input type="text" id="manFolder" class="input" placeholder="选择本地 mods 目录（支持 .disabled 禁用文件）" />
+                                            <button class="btn btn-outline" id="btnBrowseMan">浏览文件夹</button>
+                                        </div>
+                                    </div>
+                                    <div class="form-field">
+                                        <label>目标游戏版本（更新用）</label>
+                                        <input type="text" id="manMc" class="input" list="mcVersionsList" placeholder="如 1.21.1" />
+                                    </div>
+                                    <div class="form-field">
+                                        <label>目标加载器</label>
+                                        <select id="manLoader" class="input">
+                                            <option value="fabric">Fabric</option>
+                                            <option value="forge">Forge</option>
+                                            <option value="neoforge">NeoForge</option>
+                                            <option value="quilt">Quilt</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-field form-field-actions">
+                                        <button class="btn btn-primary" id="btnManScan">扫描目录</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="card-body no-pad">
-                            <div class="mod-list" id="manList">
-                                <div class="empty-state compact">
-                                    <div class="empty-state-title">请先选择目录并扫描</div>
-                                    <div class="empty-state-desc">扫描后可按需启用 / 禁用 / 删除模组，或一键检查更新。</div>
+                        <div class="wizard-actions">
+                            <span></span>
+                            <button class="btn btn-primary" id="btnManScanNext" disabled>下一步：已安装模组</button>
+                        </div>
+                    </div>
+
+                    <!-- 步骤 2：已安装模组 -->
+                    <div class="wizard-view" id="m-step-list">
+                        <div class="card">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">2</span> 已安装模组</div>
+                                <span class="ch-hint" id="manInfo">—</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="mod-toolbar">
+                                    <div class="mt-left">
+                                        <button class="btn btn-outline btn-sm" id="btnManAll">全选</button>
+                                        <button class="btn btn-outline btn-sm" id="btnManNone">清空</button>
+                                        <button class="btn btn-outline btn-sm" id="btnManInvert">反选</button>
+                                        <button class="btn btn-outline btn-sm" id="btnManDisable">禁用选中</button>
+                                        <button class="btn btn-outline btn-sm" id="btnManEnable">启用选中</button>
+                                        <button class="btn btn-outline btn-sm btn-danger" id="btnManDelete">删除选中</button>
+                                        <span class="mt-hint">已选 <b id="manSelCount">0</b> / <span id="manSelTotal">0</span></span>
+                                    </div>
+                                    <div class="mt-right">
+                                        <button class="btn btn-outline btn-sm" id="btnManCheckUpdates" title="检测已识别模组是否有新版本">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                                            </svg>
+                                            检查更新
+                                        </button>
+                                        <button class="btn btn-primary btn-sm" id="btnManUpdate" disabled>一键更新</button>
+                                        <span class="mt-hint" id="manUpdateCount"></span>
+                                    </div>
                                 </div>
                             </div>
+                            <div class="card-body no-pad">
+                                <div class="mod-list" id="manList">
+                                    <div class="empty-state compact">
+                                        <div class="empty-state-title">请先在步骤 1 选择目录并扫描</div>
+                                        <div class="empty-state-desc">扫描后可按需启用 / 禁用 / 删除模组，或一键检查更新。</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wizard-actions">
+                            <button class="btn btn-outline" id="btnManListPrev">上一步：选择目录</button>
+                            <span></span>
                         </div>
                     </div>
                 </section>
@@ -1170,6 +1196,31 @@
                                 <div class="stat-card stat-done">
                                     <div class="stat-num" id="doneCount">0</div>
                                     <div class="stat-label">已完成</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 整体进度（V3.7）：运行中任务实时汇总 -->
+                        <div class="card" id="overallCard" style="display:none">
+                            <div class="card-head">
+                                <div class="ch-title"><span class="ch-step">≡</span> 整体进度</div>
+                                <span class="ch-hint">运行中任务实时汇总</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="progress-panel">
+                                    <div class="pp-row1">
+                                        <div class="pp-label" id="ovText">等待任务…</div>
+                                        <div class="pp-percent" id="ovPercent">0%</div>
+                                    </div>
+                                    <div class="progress-bar-lg">
+                                        <div class="progress-fill" id="ovFill"></div>
+                                    </div>
+                                    <div class="pp-meta">
+                                        <div class="pp-meta-item speed"><span>累计网速</span><b id="ovSpeed">0 B/s</b></div>
+                                        <div class="pp-meta-item ok"><span>已完成文件</span><b id="ovDone">0</b></div>
+                                        <div class="pp-meta-item skip"><span>总文件数</span><b id="ovTotal">0</b></div>
+                                        <div class="pp-meta-item warn"><span>剩余时间</span><b id="ovEta">—</b></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1478,6 +1529,21 @@
                                         <option value="dark">深色</option>
                                     </select>
                                 </div>
+                                <div class="form-field">
+                                    <label>配色</label>
+                                    <select id="setAccent" class="input">
+                                        <option value="default">默认蓝</option>
+                                        <option value="green">护眼绿</option>
+                                        <option value="indigo">靛蓝</option>
+                                    </select>
+                                </div>
+                                <div class="form-field">
+                                    <label>对比度</label>
+                                    <select id="setContrast" class="input">
+                                        <option value="normal">标准</option>
+                                        <option value="high">高对比</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1533,14 +1599,6 @@
 
     <!-- 全局提示条 -->
     <div class="toast" id="toast"></div>
-
-    <!-- 拖拽提示遮罩（V3.1） -->
-    <div class="drop-overlay" id="dropOverlay" style="display:none">
-        <div class="drop-overlay-box">
-            <b>松开以使用拖入的内容</b>
-            <span>支持：mods 文件夹 → 自动填入扫描目录；modlist.json → 自动进入批量下载</span>
-        </div>
-    </div>
 
     <script src="/static/main.js"></script>
 </body>

@@ -61,12 +61,24 @@ from .settings import init_settings, get_settings
 # 版本信息（单一事实来源：标题栏、关于页、CI tag 均以此为准）
 # 每次大版本发布更新此处，前端会通过 /api/version 自动显示
 # ============================================================
-CURRENT_VERSION = "3.6.1"
+CURRENT_VERSION = "3.6.2"
 APP_TITLE = "ModList-Weaver"
 
 # 软件内 Changelog（与「关于」页保持一致的结构化历史）
 # 新增版本直接在头部插入，date 格式 YYYY-MM
 CHANGELOG = [
+    {
+        "version": "3.6.2",
+        "date": "2026-08",
+        "title": "任务中心实时进度 · 我的清单向导化 · 配色主题 · 骨架屏加载",
+        "items": [
+            "【任务中心】任务卡片实时刷新：运行中 / 排队中 / 已完成数量随进度更新，新增「整体进度」卡片（按文件加权的总进度、累计网速、文件数与预计剩余时间）。",
+            "【我的清单】改为两步向导（选择 mods 目录 → 已安装模组列表），记住上次使用的目录，进入页面自动恢复或自动扫描；步骤指示条可点击切换。",
+            "【主题】新增 3 套强调色（默认蓝 / 护眼绿 / 靛蓝）与「标准 / 高对比」两种对比度选项，可在设置页切换并自动保存。",
+            "【加载体验】扫描 / 搜索 / 检查更新等耗时操作为按钮增加加载动画（spinner），列表加载时展示骨架屏占位，避免界面闪烁。",
+            "【界面】导出 / 导入 / 迁移 / 我的清单四页统计卡统一改为紧凑胶囊样式，减少占用高度。",
+        ],
+    },
     {
         "version": "3.6.1",
         "date": "2026-08",
@@ -479,6 +491,8 @@ class SettingsUpdateRequest(BaseModel):
     max_concurrency: Optional[int] = None
     rate_limit_mbps: Optional[float] = None
     theme: Optional[str] = None
+    accent: Optional[str] = None      # V3.7：配色（default / green / indigo）
+    contrast: Optional[str] = None    # V3.7：对比度（normal / high）
     source: Optional[str] = None          # V3.0：下载源偏好
     curseforge_api_key: Optional[str] = None  # V3.0：CurseForge 官方 API Key（可选）
 
@@ -1247,6 +1261,10 @@ def api_update_settings(req: SettingsUpdateRequest):
         patch["rate_limit_mbps"] = req.rate_limit_mbps
     if req.theme is not None:
         patch["theme"] = req.theme
+    if req.accent is not None:
+        patch["accent"] = req.accent
+    if req.contrast is not None:
+        patch["contrast"] = req.contrast
     if req.source is not None:
         patch["source"] = req.source
     if req.curseforge_api_key is not None:

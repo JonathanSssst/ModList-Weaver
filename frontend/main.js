@@ -55,6 +55,25 @@ function setStatus(text, type = "") {
     if (span[1]) span[1].textContent = text;
 }
 
+// 按钮忙碌状态：禁用 + spinner（V3.7）
+function setBtnBusy(btn, busy) {
+    if (!btn) return;
+    btn.classList.toggle("is-loading", busy);
+    btn.disabled = busy;
+}
+
+// 列表骨架屏占位（V3.7）
+function showSkeleton(boxId, rows) {
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    box.innerHTML = Array.from({ length: rows }, () => `
+        <div class="skel-row">
+            <div class="skeleton skel-sm"></div>
+            <div class="skeleton skel-md"></div>
+            <div class="skeleton skel-sm"></div>
+        </div>`).join("");
+}
+
 function formatBytes(n) {
     if (!n) return "0 B";
     const u = ["B", "KB", "MB", "GB"];
@@ -98,9 +117,11 @@ try {
 } catch (_) {}
 
 // ================================================================
-// 主题（明 / 暗）：localStorage 偏好 + 服务端设置，三态 auto/light/dark
+// 主题（明 / 暗）+ 配色 + 对比度：localStorage 偏好 + 服务端设置（V3.7）
 // ================================================================
 const THEME_KEY = "mlw_theme";
+const ACCENT_KEY = "mlw_accent";
+const CONTRAST_KEY = "mlw_contrast";
 
 function systemDark() {
     return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -114,6 +135,10 @@ function resolveTheme(pref) {
 
 let themePref = "auto";
 try { themePref = localStorage.getItem(THEME_KEY) || "auto"; } catch (_) {}
+let accentPref = "default";
+try { accentPref = localStorage.getItem(ACCENT_KEY) || "default"; } catch (_) {}
+let contrastPref = "normal";
+try { contrastPref = localStorage.getItem(CONTRAST_KEY) || "normal"; } catch (_) {}
 
 function applyTheme(pref) {
     themePref = pref || themePref;
@@ -125,10 +150,30 @@ function applyTheme(pref) {
             : `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>`;
     }
     document.documentElement.setAttribute("data-theme", resolved);
+    document.documentElement.setAttribute("data-accent", accentPref);
+    document.documentElement.setAttribute("data-contrast", contrastPref);
     try { localStorage.setItem(THEME_KEY, themePref); } catch (_) {}
     const sel = document.getElementById("setTheme");
     if (sel) sel.value = themePref;
+    const acc = document.getElementById("setAccent");
+    if (acc) acc.value = accentPref;
+    const con = document.getElementById("setContrast");
+    if (con) con.value = contrastPref;
 }
+
+// 切换配色 / 对比度（预览即时生效，保存设置时同步到服务端）
+function setAccent(val) {
+    accentPref = ["default", "green", "indigo"].includes(val) ? val : "default";
+    document.documentElement.setAttribute("data-accent", accentPref);
+    try { localStorage.setItem(ACCENT_KEY, accentPref); } catch (_) {}
+}
+function setContrast(val) {
+    contrastPref = ["normal", "high"].includes(val) ? val : "normal";
+    document.documentElement.setAttribute("data-contrast", contrastPref);
+    try { localStorage.setItem(CONTRAST_KEY, contrastPref); } catch (_) {}
+}
+document.getElementById("setAccent").addEventListener("change", (e) => setAccent(e.target.value));
+document.getElementById("setContrast").addEventListener("change", (e) => setContrast(e.target.value));
 
 function toggleTheme() {
     const next = resolveTheme(themePref) === "dark" ? "light" : "dark";
@@ -191,6 +236,7 @@ const state = {
     wasDownloading: false, // 是否有任务进行中（完成通知判定，V3.2）
     manMods: [],          // 本地模组管理（页面 E）：扫描结果（V3.3）
     manUpdateMap: {},     // 页面 E：project_id -> 更新信息（V3.3）
+    manStep: 1,           // 页面 E：向导步骤（V3.7）
     migMods: [],          // 模组迁移（页面 I）：扫描结果（V3.5）
     migStep: 1,           // 模组迁移（页面 I）：向导步骤（V3.6）
     customMods: [],       // 自定义模组包（页面 J）：清单（V3.5）
@@ -214,7 +260,7 @@ const catalogState = {
 
 // 下载偏好（详情页下载表单记忆，localStorage 持久化）
 function loadPref() {
-    const p = { mc: "", loader: "fabric", saveDir: "" };
+    const p = { mc: "", loader: "fabric", saveDir: "", manFolder: "" };
     try {
         const raw = localStorage.getItem("mlw_pref");
         if (raw) Object.assign(p, JSON.parse(raw));
@@ -226,6 +272,10 @@ function savePref(mc, loader, saveDir) {
     pref.mc = mc;
     pref.loader = loader;
     pref.saveDir = saveDir;
+    try { localStorage.setItem("mlw_pref", JSON.stringify(pref)); } catch (_) {}
+}
+function saveManFolder(folder) {
+    pref.manFolder = folder || "";
     try { localStorage.setItem("mlw_pref", JSON.stringify(pref)); } catch (_) {}
 }
 const LOADER_LABELS = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge", quilt: "Quilt" };
@@ -255,11 +305,21 @@ function switchPage(pageId) {
         if (!state.catDetail && !catalogState.loaded) searchCatalog(1);
     }
     if (pageId === "pageE") {
-        // 预填目标版本 / 加载器（V3.3：本地模组管理）
+        // 预填目标版本 / 加载器 / 记忆目录；已扫描则回到列表，否则自动扫描（V3.7）
         const mc = document.getElementById("manMc");
         const ldr = document.getElementById("manLoader");
+        const folder = document.getElementById("manFolder");
         if (mc && !mc.value) mc.value = pref.mc || "";
         if (ldr) ldr.value = pref.loader || "fabric";
+        if (folder && !folder.value && pref.manFolder) folder.value = pref.manFolder;
+        if (state.manMods.length) {
+            showManStep(2, true);
+        } else if (pref.manFolder) {
+            showManStep(1, true);
+            autoScanMan();
+        } else {
+            showManStep(1, true);
+        }
     }
     if (pageId === "pageI") {
         // 预填迁移目标（V3.5）；恢复向导步骤（V3.6）
@@ -334,6 +394,7 @@ function resetPage(pageId) {
         case "pageE":
             state.manMods = [];
             state.manUpdateMap = {};
+            state.manStep = 1;
             const manFolder = document.getElementById("manFolder");
             if (manFolder) manFolder.value = "";
             const manMc = document.getElementById("manMc");
@@ -347,6 +408,7 @@ function resetPage(pageId) {
             const manBtn = document.getElementById("btnManUpdate");
             if (manBtn) manBtn.disabled = true;
             renderManList();
+            showManStep(1, true);
             break;
         case "pageI":
             state.migMods = [];
@@ -495,7 +557,8 @@ document.getElementById("btnScan").addEventListener("click", async () => {
     const folder = document.getElementById("scanFolder").value.trim();
     if (!folder) { toast("请先选择 mods 目录", "err"); return; }
     const btn = document.getElementById("btnScan");
-    btn.disabled = true;
+    setBtnBusy(btn, true);
+    showSkeleton("modList", 5);
     setStatus("扫描中…", "busy");
     toast("正在扫描模组并反查 Modrinth…");
     try {
@@ -511,7 +574,7 @@ document.getElementById("btnScan").addEventListener("click", async () => {
         setStatus("就绪");
         toast("扫描失败：" + e.message, "err");
     } finally {
-        btn.disabled = false;
+        setBtnBusy(btn, false);
     }
 });
 
@@ -643,7 +706,8 @@ async function checkUpdates() {
         }));
     if (!mods.length) { toast("没有可检测的已识别模组", "err"); return; }
     const btn = document.getElementById("btnCheckUpdates");
-    if (btn) { btn.disabled = true; btn.textContent = "检测中…"; }
+    setBtnBusy(btn, true);
+    if (btn) btn.textContent = "检测中…";
     try {
         const data = await postJSON(`${API}/check_updates`, { mods });
         state.updateMap = {};
@@ -656,7 +720,8 @@ async function checkUpdates() {
     } catch (e) {
         toast("检查更新失败：" + e.message, "err");
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = "检查更新"; }
+        if (btn) btn.textContent = "检查更新";
+        setBtnBusy(btn, false);
     }
 }
 
@@ -916,7 +981,8 @@ async function searchCatalog(page) {
     catalogState.page = page || 1;
 
     const btn = document.getElementById("btnCatSearch");
-    btn.disabled = true;
+    setBtnBusy(btn, true);
+    showSkeleton("modCatalog", 6);
     setStatus("搜索中…", "busy");
     try {
         const data = await postJSON(`${API}/search_mod`, {
@@ -935,7 +1001,7 @@ async function searchCatalog(page) {
         setStatus("就绪");
         toast("搜索失败：" + e.message, "err");
     } finally {
-        btn.disabled = false;
+        setBtnBusy(btn, false);
     }
 }
 
@@ -1312,16 +1378,76 @@ document.getElementById("btnDlDownload").addEventListener("click", async () => {
 // ================================================================
 document.getElementById("btnBrowseMan").addEventListener("click", async () => {
     const data = await getJSON(`${API}/pick_folder?title=选择本地 mods 目录`);
-    if (data.folder) document.getElementById("manFolder").value = data.folder;
+    if (data.folder) {
+        document.getElementById("manFolder").value = data.folder;
+        saveManFolder(data.folder);
+    }
 });
 
 document.getElementById("btnManScan").addEventListener("click", scanInstalledMods);
+
+// ---------- 步骤切换（V3.7：本地模组向导） ----------
+const MAN_VIEWS = { 1: "m-step-scan", 2: "m-step-list" };
+let manScanning = false;
+
+function showManStep(n, silent) {
+    state.manStep = n;
+    Object.entries(MAN_VIEWS).forEach(([step, id]) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle("active", Number(step) === n);
+    });
+    document.querySelectorAll("#manWizardSteps .wstep").forEach(el => {
+        const step = Number(el.dataset.step);
+        el.classList.toggle("active", step === n);
+        el.classList.toggle("done", step < n);
+    });
+    const next = document.getElementById("btnManScanNext");
+    if (next) next.disabled = !state.manMods.length;
+    if (n === 2) renderManList();
+    if (!silent) {
+        const titles = { 1: "选择 mods 目录并扫描", 2: "已安装模组管理" };
+        setStatus("步骤 " + n + "：" + titles[n], "");
+    }
+}
+
+document.getElementById("manWizardSteps").addEventListener("click", (e) => {
+    const ws = e.target.closest(".wstep");
+    if (!ws) return;
+    const step = Number(ws.dataset.step);
+    if (step > 1 && !state.manMods.length) {
+        toast("请先在步骤 1 完成扫描", "err");
+        return;
+    }
+    showManStep(step);
+});
+
+document.getElementById("btnManScanNext").addEventListener("click", () => {
+    if (!state.manMods.length) { toast("请先扫描模组", "err"); return; }
+    showManStep(2);
+});
+document.getElementById("btnManListPrev").addEventListener("click", () => showManStep(1));
+
+// 进入页面时检测到已记忆目录自动扫描（V3.7）
+async function autoScanMan() {
+    if (manScanning) return;
+    const folder = document.getElementById("manFolder").value.trim();
+    if (!folder) return;
+    manScanning = true;
+    try {
+        await scanInstalledMods();
+        if (state.manMods.length) showManStep(2, true);
+    } catch (_) {
+    } finally {
+        manScanning = false;
+    }
+}
 
 async function scanInstalledMods() {
     const folder = document.getElementById("manFolder").value.trim();
     if (!folder) { toast("请先选择 mods 目录", "err"); return; }
     const btn = document.getElementById("btnManScan");
-    btn.disabled = true;
+    setBtnBusy(btn, true);
+    showSkeleton("manList", 5);
     setStatus("扫描中…", "busy");
     try {
         const data = await postJSON(`${API}/manage_scan`, { folder });
@@ -1336,13 +1462,14 @@ async function scanInstalledMods() {
         const cnt = document.getElementById("manUpdateCount");
         if (cnt) cnt.textContent = "";
         renderManList();
+        saveManFolder(folder);
         setStatus("就绪");
         toast(`扫描完成：${data.matched}/${data.total} 已识别`, "ok");
     } catch (e) {
         setStatus("就绪");
         toast("扫描失败：" + e.message, "err");
     } finally {
-        btn.disabled = false;
+        setBtnBusy(btn, false);
     }
 }
 
@@ -1485,7 +1612,8 @@ async function checkInstalledUpdates() {
         }));
     if (!mods.length) { toast("没有可检测的已识别模组", "err"); return; }
     const btn = document.getElementById("btnManCheckUpdates");
-    if (btn) { btn.disabled = true; btn.textContent = "检测中…"; }
+    setBtnBusy(btn, true);
+    if (btn) btn.textContent = "检测中…";
     try {
         const mc = document.getElementById("manMc").value.trim() || null;
         const loader = document.getElementById("manLoader").value;
@@ -1502,7 +1630,8 @@ async function checkInstalledUpdates() {
     } catch (e) {
         toast("检查更新失败：" + e.message, "err");
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = "检查更新"; }
+        if (btn) btn.textContent = "检查更新";
+        setBtnBusy(btn, false);
     }
 }
 
@@ -1605,6 +1734,25 @@ function formatDuration(sec) {
     const mm = String(m).padStart(2, "0");
     const ss = String(s).padStart(2, "0");
     return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function formatEta(sec) {
+    if (!sec || !isFinite(sec) || sec <= 0) return "—";
+    if (sec < 60) return Math.ceil(sec) + " 秒";
+    if (sec < 3600) return Math.ceil(sec / 60) + " 分钟";
+    const h = Math.floor(sec / 3600);
+    const m = Math.round((sec % 3600) / 60);
+    return `${h} 小时${m ? " " + m + " 分" : ""}`;
+}
+
+// 解析后端速度文本（如 "1.2 MB/s"）为字节/秒
+function parseSpeed(text) {
+    const m = String(text || "").match(/^([\d.]+)\s*([KMG]?)B\/s$/i);
+    if (!m) return 0;
+    const n = parseFloat(m[1]) || 0;
+    const u = m[2].toUpperCase();
+    const mult = u === "K" ? 1024 : u === "M" ? 1048576 : u === "G" ? 1073741824 : 1;
+    return n * mult;
 }
 
 function dirOf(p) {
@@ -2053,6 +2201,52 @@ function hideMiniProgress() {
     if (box) box.style.display = "none";
 }
 
+// ---------- 任务中心实时统计（V3.7）：运行/排队/已完成 + 整体进度汇总 ----------
+function updateTaskStats(tasks, hist) {
+    const runEl = document.getElementById("runCount");
+    const queEl = document.getElementById("queueCount");
+    const doneEl = document.getElementById("doneCount");
+    if (runEl) runEl.textContent = tasks.filter(t => t.status === "running").length;
+    if (queEl) queEl.textContent = tasks.filter(t => t.status === "pending").length;
+    if (doneEl) doneEl.textContent = (hist || []).filter(h => h.status === "completed").length;
+
+    const running = tasks.filter(t => t.status === "running");
+    const card = document.getElementById("overallCard");
+    if (!card) return;
+    if (!running.length) { card.style.display = "none"; return; }
+    card.style.display = "";
+
+    let wSum = 0, filesDone = 0, filesTotal = 0, bytesDone = 0, bytesTotal = 0, cumSpeed = 0;
+    running.forEach(t => {
+        const total = t.total || 0;
+        if (total > 0) {
+            filesDone += t.done || 0;
+            filesTotal += total;
+            wSum += taskPct(t) * total;
+        }
+        bytesDone += t.progress_done || 0;
+        bytesTotal += t.progress_total || 0;
+        cumSpeed += parseSpeed(t.speed_text);
+    });
+    const pct = filesTotal ? Math.min(100, wSum / filesTotal) : 0;
+    const eta = cumSpeed > 0 && bytesTotal > 0 ? (bytesTotal - bytesDone) / cumSpeed : 0;
+
+    const ovText = document.getElementById("ovText");
+    if (ovText) ovText.textContent = running.length > 1 ? `共 ${running.length} 个任务下载中` : "任务下载中";
+    const percentEl = document.getElementById("ovPercent");
+    if (percentEl) percentEl.textContent = Math.round(pct) + "%";
+    const fill = document.getElementById("ovFill");
+    if (fill) fill.style.width = pct + "%";
+    const speedEl = document.getElementById("ovSpeed");
+    if (speedEl) speedEl.textContent = formatBytes(cumSpeed) + "/s";
+    const doneFEl = document.getElementById("ovDone");
+    if (doneFEl) doneFEl.textContent = filesDone;
+    const totalFEl = document.getElementById("ovTotal");
+    if (totalFEl) totalFEl.textContent = filesTotal;
+    const etaEl = document.getElementById("ovEta");
+    if (etaEl) etaEl.textContent = formatEta(eta);
+}
+
 // ---------- 队列轮询 ----------
 let pollTimer = null;
 function startQueuePoll() {
@@ -2103,6 +2297,7 @@ async function pollQueue() {
         state.history = hist;
         renderActiveTasks(tasks);
         renderHistoryTasks(hist);
+        updateTaskStats(tasks, hist);
         if (state.settleTaskId) {
             const h = hist.find(x => x.task_id === state.settleTaskId);
             if (h) renderSettlement(h);
@@ -2137,6 +2332,10 @@ async function loadSettings() {
         if (rate) rate.value = s.rate_limit_mbps ?? 0;
         const theme = document.getElementById("setTheme");
         if (theme) theme.value = s.theme || "auto";
+        const accent = document.getElementById("setAccent");
+        if (accent && s.accent) { accent.value = s.accent; setAccent(s.accent); }
+        const contrast = document.getElementById("setContrast");
+        if (contrast && s.contrast) { contrast.value = s.contrast; setContrast(s.contrast); }
         const src = document.getElementById("setSource");
         if (src) src.value = s.source || "auto";
         const cfk = document.getElementById("setCfKey");
@@ -2152,6 +2351,8 @@ document.getElementById("btnSaveSettings").addEventListener("click", async () =>
         max_concurrency: parseInt(document.getElementById("setConcurrency").value, 10) || 3,
         rate_limit_mbps: parseFloat(document.getElementById("setRateLimit").value) || 0,
         theme: document.getElementById("setTheme").value,
+        accent: document.getElementById("setAccent").value,
+        contrast: document.getElementById("setContrast").value,
         source: document.getElementById("setSource").value || "auto",
         curseforge_api_key: (document.getElementById("setCfKey").value || "").trim(),
     };
@@ -2163,6 +2364,8 @@ document.getElementById("btnSaveSettings").addEventListener("click", async () =>
     try {
         const s = await postJSON(`${API}/settings`, patch);
         applyTheme(s.theme || "auto");
+        if (s.accent) setAccent(s.accent);
+        if (s.contrast) setContrast(s.contrast);
         const saved = document.getElementById("settingsSaved");
         if (saved) saved.textContent = "已保存";
         setTimeout(() => { if (saved) saved.textContent = ""; }, 2000);
@@ -2290,7 +2493,8 @@ async function scanMigMods() {
     const folder = document.getElementById("migFolder").value.trim();
     if (!folder) { toast("请先选择源 mods 目录", "err"); return; }
     const btn = document.getElementById("btnMigScan");
-    btn.disabled = true;
+    setBtnBusy(btn, true);
+    showSkeleton("migList", 5);
     setStatus("扫描中…", "busy");
     try {
         const data = await postJSON(`${API}/scan_mods`, { folder });
@@ -2304,7 +2508,7 @@ async function scanMigMods() {
         setStatus("就绪");
         toast("扫描失败：" + e.message, "err");
     } finally {
-        btn.disabled = false;
+        setBtnBusy(btn, false);
     }
 }
 
@@ -2578,7 +2782,8 @@ async function searchCustom() {
     const query = document.getElementById("customQuery").value.trim();
     const loader = document.getElementById("customLoader").value;
     const box = document.getElementById("customResults");
-    box.innerHTML = `<div class="empty-state compact"><div class="empty-state-title">搜索中…</div></div>`;
+    setBtnBusy(document.getElementById("btnCustomSearch"), true);
+    showSkeleton("customResults", 4);
     try {
         const data = await postJSON(`${API}/search_mod`, {
             query, loader: loader || null, limit: 20, offset: 0,
@@ -2587,6 +2792,8 @@ async function searchCustom() {
         renderCustomResults(state.customLastHits);
     } catch (e) {
         box.innerHTML = `<div class="empty-state compact"><div class="empty-state-title">搜索失败</div><div class="empty-state-desc">${escapeHtml(e.message)}</div></div>`;
+    } finally {
+        setBtnBusy(document.getElementById("btnCustomSearch"), false);
     }
 }
 
@@ -2864,92 +3071,6 @@ document.getElementById("btnBrowseCustom").addEventListener("click", async () =>
     const data = await getJSON(`${API}/pick_save?title=导出自定义清单&filename=modpack.json&ext=json`);
     if (data.path) document.getElementById("customPath").value = data.path;
 });
-
-// ================================================================
-// 拖拽支持（V3.1）：文件夹 → 扫描目录；modlist.json → 批量下载
-// ================================================================
-function importDroppedJson(path) {
-    document.getElementById("jsonPath").value = path;
-    switchPage("pageB");
-    showBStep(1, true);
-    toast("已导入清单：" + String(path).split(/[\\/]/).pop(), "ok");
-}
-
-function showDropOverlay() {
-    const ov = document.getElementById("dropOverlay");
-    if (ov) ov.style.display = "flex";
-}
-function hideDropOverlay() {
-    const ov = document.getElementById("dropOverlay");
-    if (ov) ov.style.display = "none";
-}
-
-function isPywebviewRuntime() {
-    return !!(window.pywebview && (window.pywebview.api || window.pywebview.platform));
-}
-
-// pywebview 主机通过 main.py 注入完整绝对路径后回调本函数
-window.__pywebviewDropped = function (items) {
-    if (!Array.isArray(items) || !items.length) return;
-    const folder = items.find(i => i.is_dir);
-    const jsonFile = items.find(i => !i.is_dir && i.ext === ".json");
-    if (folder) {
-        const input = document.getElementById("scanFolder");
-        if (input) input.value = folder.path;
-        switchPage("pageA");
-        showWizardStep(1, true);
-        toast(`已填入模组目录：${folder.path}`, "ok");
-    } else if (jsonFile) {
-        importDroppedJson(jsonFile.path);
-    } else if (items.length === 1) {
-        importDroppedJson(items[0].path);
-    } else {
-        toast("请拖入 mods 文件夹或 modlist.json 文件", "err");
-    }
-};
-
-// 纯浏览器开发态降级：无完整路径时读取 json 文件内容导入
-(function setupNativeDrop() {
-    let dragDepth = 0;
-    document.addEventListener("dragenter", (e) => {
-        e.preventDefault();
-        dragDepth++;
-        showDropOverlay();
-    });
-    document.addEventListener("dragover", (e) => e.preventDefault());
-    document.addEventListener("dragleave", (e) => {
-        e.preventDefault();
-        dragDepth = Math.max(0, dragDepth - 1);
-        if (!dragDepth) hideDropOverlay();
-    });
-    document.addEventListener("drop", (e) => {
-        e.preventDefault();
-        dragDepth = 0;
-        hideDropOverlay();
-        if (isPywebviewRuntime()) return; // 由 pywebview 主机处理（含完整路径）
-        const files = e.dataTransfer && e.dataTransfer.files;
-        if (!files || !files.length) return;
-        const f = files[0];
-        if (f.name && f.name.toLowerCase().endsWith(".json")) {
-            const reader = new FileReader();
-            reader.onload = async () => {
-                try {
-                    const data = await postJSON(`${API}/import_modlist`, {
-                        filename: f.name,
-                        content: String(reader.result || ""),
-                    });
-                    importDroppedJson(data.path);
-                } catch (err) {
-                    toast("导入清单失败：" + err.message, "err");
-                }
-            };
-            reader.onerror = () => toast("读取文件失败", "err");
-            reader.readAsText(f);
-        } else {
-            toast("请拖入 mods 文件夹或 modlist.json 文件", "err");
-        }
-    });
-})();
 
 // ================================================================
 // 启动
