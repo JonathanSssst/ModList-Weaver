@@ -209,7 +209,7 @@ const catalogState = {
     page: 1,
     total: 0,
     loaded: false,
-    lastHits: [], // V3.5：当前页命中结果（详情页反依赖上下文）
+    lastHits: [], // V3.5：当前页命中结果
 };
 
 // 下载偏好（详情页下载表单记忆，localStorage 持久化）
@@ -1036,10 +1036,8 @@ async function loadDetail(pid) {
         </div>`;
     try {
         const data = await getJSON(`${API}/project/${encodeURIComponent(pid)}`);
-        lastDetail = data;
         renderDetail(box, data);
     } catch (e) {
-        lastDetail = null;
         box.innerHTML = `
             <div class="empty-state compact">
                 <div class="empty-state-title">加载详情失败</div>
@@ -1048,7 +1046,7 @@ async function loadDetail(pid) {
     }
 }
 
-let lastDetail = null;
+const DEP_LABELS = { required: "必需依赖", optional: "可选依赖", incompatible: "不兼容", embedded: "内置依赖" };
 
 function renderDetail(box, d) {
     const titleEl = document.getElementById("detailTitle");
@@ -1059,10 +1057,9 @@ function renderDetail(box, d) {
     const loaders = (d.loaders || []).slice(0, 6).map(c =>
         `<span class="chip">${escapeHtml(c)}</span>`).join("");
     const authors = (d.authors || []).map(a => `
-        <div class="author-item" title="${escapeHtml(a.role || "")}">
+        <div class="author-item">
             <img class="author-avatar" src="${escapeHtml(a.avatar_url || "")}" onerror="this.style.display='none'" />
             <span class="author-name">${escapeHtml(a.name || "?")}</span>
-            ${a.role_label ? `<span class="author-role author-role-${escapeHtml((a.role_label === "原开发者" ? "creator" : a.role_label === "维护者" ? "maintainer" : "contributor"))}">${escapeHtml(a.role_label)}</span>` : ""}
         </div>`).join("") || `<span class="text-mute">暂无</span>`;
 
     const rvs = (d.versions || []).slice(0, 10).map(v => {
@@ -1082,57 +1079,31 @@ function renderDetail(box, d) {
         </div>`;
     }).join("") || `<div class="empty-state compact"><div class="empty-state-title">暂无版本信息</div></div>`;
 
-    const ldOpts = Object.entries(LOADER_LABELS).map(([v, label]) =>
-        `<option value="${v}" ${pref.loader === v ? "selected" : ""}>${label}</option>`).join("");
-
-    // V3.5：前置依赖（最新版本 dependencies）
-    const latest = (d.versions || [])[0];
-    const depGroups = { required: [], optional: [], incompatible: [], embedded: [] };
-    const DEP_LABELS = { required: "必需依赖", optional: "可选依赖", incompatible: "不兼容", embedded: "内置依赖" };
-    for (const dep of (latest && latest.dependencies) || []) {
-        if (!dep || dep.project_id === undefined || dep.project_id === null) continue;
-        const t = dep.dependency_type in DEP_LABELS ? dep.dependency_type : "required";
-        const target = dep.project_id ? String(dep.project_id) : dep.version_id ? String(dep.version_id) : null;
-        if (!target) continue;
-        depGroups[t].push(`<button class="dep-chip dep-chip-${escapeHtml(t)}" data-pid="${escapeHtml(target)}" data-dsrc="${escapeHtml(d.source || "auto")}" title="点击查看详情">
-            ${escapeHtml(dep.project_id || dep.version_id)}<span class="dep-type">${escapeHtml(DEP_LABELS[t])}</span>
-        </button>`);
+    // V3.6.1：右侧来源链接 —— 源码 GitHub / Modrinth / MC百科（若支持）
+    const srcLinks = [];
+    if (d.source_url) {
+        srcLinks.push(`<a class="d-stat link" href="${escapeHtml(d.source_url)}" target="_blank" title="源码仓库"><b>源码</b><span>GitHub</span></a>`);
     }
-    const depHtml = Object.keys(depGroups).map(t =>
-        depGroups[t].length
-            ? `<div class="dep-group"><span class="dep-group-label">${DEP_LABELS[t]}</span>${depGroups[t].join("")}</div>`
-            : ""
-    ).join("");
-    const depsCard = `
-        <div class="card">
-            <div class="card-head">
-                <div class="ch-title"><span class="ch-step">⊘</span> 前置依赖</div>
-                <span class="ch-hint">最新版本 ${latest ? escapeHtml(latest.version_number || latest.name || "") : "—"} 的依赖</span>
-            </div>
-            <div class="card-body">
-                ${depHtml || `<span class="text-mute">该模组没有已声明的依赖。</span>`}
-            </div>
-        </div>
+    if (d.source === "modrinth" && (d.slug || d.project_id)) {
+        srcLinks.push(`<a class="d-stat link" href="https://modrinth.com/project/${escapeHtml(d.slug || d.project_id)}" target="_blank" title="Modrinth 项目页"><b>Modrinth</b><span>项目页</span></a>`);
+    }
+    if (d.source === "curseforge" && d.slug) {
+        srcLinks.push(`<a class="d-stat link" href="https://www.curseforge.com/minecraft/mc-mods/${escapeHtml(d.slug)}" target="_blank" title="CurseForge 项目页"><b>CurseForge</b><span>项目页</span></a>`);
+    }
+    if (d.title) {
+        srcLinks.push(`<a class="d-stat link" href="https://search.mcmod.cn/s?key=${encodeURIComponent(d.title)}" target="_blank" title="在 MC百科 搜索"><b>MC百科</b><span>搜索</span></a>`);
+    }
 
-        <div class="card">
-            <div class="card-head">
-                <div class="ch-title"><span class="ch-step">⇱</span> 反依赖（后置）</div>
-                <span class="ch-hint">在当前清单中查找依赖该模组的项目</span>
-            </div>
-            <div class="card-body">
-                <p class="field-hint">分析范围取自来源页面（${escapeHtml(PAGE_TITLES[state.detailBackPage] || "当前页面")}）的模组清单，逐项查询最近版本依赖；清单较大时可能耗时较长。</p>
-                <div class="form-actions">
-                    <button class="btn btn-outline" id="btnRevDeps">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                        分析反依赖
-                    </button>
-                </div>
-                <div id="revResult"></div>
-            </div>
-        </div>`;
+    // 前置依赖（V3.6.1）：下拉选择最近版本查看对应依赖，默认最新版本
+    const recentVersions = (d.versions || []).slice(0, 6);
+    detailVersionsCache = recentVersions.map(v => ({
+        label: v.version_number || v.name || "—",
+        deps: extractDeps(v),
+    }));
+    const verOptions = detailVersionsCache.map((v, i) =>
+        `<option value="${i}">${escapeHtml(v.label)}${v.deps.length ? "（" + v.deps.length + " 个依赖）" : ""}</option>`
+    ).join("");
+    const depHtml = buildDepGroups(detailVersionsCache[0] ? detailVersionsCache[0].deps : []);
 
     box.innerHTML = `
         <div class="card">
@@ -1143,7 +1114,13 @@ function renderDetail(box, d) {
                         <div class="d-title-line">
                             <h3 class="d-title">${escapeHtml(d.title)}</h3>
                             <span class="chip">${escapeHtml(d.project_type || "mod")}</span>
-                            <button class="btn btn-outline btn-sm" id="btnOpenSourcePage">源页面</button>
+                            <button class="btn btn-primary btn-sm btn-icon-only" id="btnDlOpen" title="下载该模组">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="7 10 12 15 17 10"/>
+                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                            </button>
                         </div>
                         <div class="d-sub">${escapeHtml(d.project_id)}${d.slug ? " · " + escapeHtml(d.slug) : ""}</div>
                         <p class="d-desc">${escapeHtml(d.description || "（无简介）")}</p>
@@ -1153,7 +1130,7 @@ function renderDetail(box, d) {
                         <div class="d-stat"><b>${formatCount(d.downloads)}</b><span>下载量</span></div>
                         <div class="d-stat"><b>${formatCount(d.followers)}</b><span>收藏</span></div>
                         <div class="d-stat"><b>${escapeHtml(d.license || "?")}</b><span>许可</span></div>
-                        ${d.source_url ? `<a class="d-stat link" href="${escapeHtml(d.source_url)}" target="_blank"><b>源码</b><span>GitHub</span></a>` : ""}
+                        ${srcLinks.join("")}
                     </div>
                 </div>
                 <div class="d-authors">
@@ -1165,59 +1142,95 @@ function renderDetail(box, d) {
 
         <div class="card">
             <div class="card-head">
+                <div class="ch-title"><span class="ch-step">⊘</span> 前置依赖</div>
+                <select class="input dep-ver-select" id="depVerSel" title="选择版本查看对应依赖">${verOptions}</select>
+            </div>
+            <div class="card-body" id="depGroups">
+                ${depHtml || `<span class="text-mute">该模组没有已声明的依赖。</span>`}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
                 <div class="ch-title"><span class="ch-step">◈</span> 最近版本</div>
                 <span class="ch-hint">最新 10 个版本</span>
             </div>
             <div class="card-body no-pad">
                 <div class="rv-list">${rvs}</div>
             </div>
-        </div>
-
-        ${depsCard}
-
-        <div class="card">
-            <div class="card-head">
-                <div class="ch-title"><span class="ch-step">⇩</span> 下载该模组</div>
-                <span class="ch-hint">自动解析并下载 required 前置依赖</span>
-            </div>
-            <div class="card-body">
-                <div class="form-row form-row-grid">
-                    <div class="form-field">
-                        <label>项目 ID（自动填入）</label>
-                        <input type="text" id="dlPid" class="input monospaced" value="${escapeHtml(d.project_id)}" readonly />
-                    </div>
-                    <div class="form-field">
-                        <label>目标游戏版本</label>
-                        <input type="text" id="dlMc" class="input" list="mcVersionsList" placeholder="选择或输入 MC 版本，如 1.21.1" value="${escapeHtml(pref.mc)}" />
-                    </div>
-                    <div class="form-field">
-                        <label>目标加载器</label>
-                        <select id="dlLoader" class="input">${ldOpts}</select>
-                    </div>
-                    <div class="form-field form-field-2col">
-                        <label>保存目录</label>
-                        <div class="input-group">
-                            <input type="text" id="dlSaveDir" class="input" placeholder="模组保存目录" value="${escapeHtml(pref.saveDir)}" />
-                            <button class="btn btn-outline" id="btnBrowseDlDir">浏览文件夹</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-actions">
-                    <button class="btn btn-primary btn-lg" id="btnDlDownload">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                        下载该模组
-                    </button>
-                    <div class="field-hint">有任务执行中时将自动加入队列排队。</div>
-                </div>
-            </div>
         </div>`;
+
+    // V3.6.1：异步补全前置依赖名称与图标
+    if (detailVersionsCache[0] && detailVersionsCache[0].deps.length) loadDetailDepNames(detailVersionsCache[0].deps);
 }
 
-// 详情页：浏览目录 / 下载按钮 / 版本日志折叠（事件委托）
+// V3.6.1：从版本对象提取前置依赖列表（project_id / version_id -> pid）
+function extractDeps(v) {
+    const deps = [];
+    for (const dep of (v && v.dependencies) || []) {
+        if (!dep || dep.project_id === undefined || dep.project_id === null) continue;
+        const t = dep.dependency_type in DEP_LABELS ? dep.dependency_type : "required";
+        const target = dep.project_id ? String(dep.project_id) : dep.version_id ? String(dep.version_id) : null;
+        if (!target) continue;
+        deps.push({ pid: target, src: dep.source || "auto", t });
+    }
+    return deps;
+}
+
+// V3.6.1：按依赖类型分组渲染（名称占位「读取中…」，随后由 loadDetailDepNames 补全）
+function buildDepGroups(deps) {
+    if (!deps.length) return "";
+    return Object.keys(DEP_LABELS).map(t => {
+        const chips = deps.filter(x => x.t === t).map(dep => `
+            <button class="dep-chip dep-chip-${escapeHtml(dep.t)}" data-pid="${escapeHtml(dep.pid)}" data-dsrc="${escapeHtml(dep.src)}" title="点击查看详情">
+                <span class="dep-name">读取中…</span><span class="dep-type">${escapeHtml(DEP_LABELS[dep.t])}</span>
+            </button>`).join("");
+        return chips ? `<div class="dep-group"><span class="dep-group-label">${DEP_LABELS[t]}</span>${chips}</div>` : "";
+    }).join("");
+}
+
+// V3.6.1：切换版本后重渲染对应依赖
+function showDetailDeps(idx) {
+    const v = detailVersionsCache[idx];
+    if (!v) return;
+    const groupsEl = document.getElementById("depGroups");
+    if (!groupsEl) return;
+    groupsEl.innerHTML = buildDepGroups(v.deps) || `<span class="text-mute">该版本没有已声明的依赖。</span>`;
+    if (v.deps.length) loadDetailDepNames(v.deps);
+}
+
+let detailVersionsCache = [];
+
+// V3.6.1：详情页前置依赖 —— 异步读取名称与图标（不显示 ID）
+async function loadDetailDepNames(deps) {
+    const infos = {};
+    await Promise.all(deps.map(async dep => {
+        const pid = dep.pid;
+        try {
+            const dd = await getJSON(`${API}/project/${encodeURIComponent(pid)}`);
+            infos[pid] = { name: dd.title || dd.project_id || pid, icon: dd.icon_url || "" };
+        } catch (_) {
+            infos[pid] = { name: pid, icon: "" };
+        }
+    }));
+    const groupsEl = document.getElementById("depGroups");
+    if (!groupsEl) return;
+    const html = Object.keys(DEP_LABELS).map(t => {
+        const chips = deps.filter(x => x.t === t).map(dep => {
+            const info = infos[dep.pid] || { name: dep.pid, icon: "" };
+            const icon = info.icon
+                ? `<img class="dep-icon" src="${escapeHtml(info.icon)}" onerror="this.style.display='none'" />`
+                : `<span class="dep-icon dep-icon-ph">${escapeHtml((info.name || "?").charAt(0).toUpperCase())}</span>`;
+            return `<button class="dep-chip dep-chip-${escapeHtml(dep.t)}" data-pid="${escapeHtml(dep.pid)}" data-dsrc="${escapeHtml(dep.src)}" title="点击查看详情">
+                ${icon}<span class="dep-name">${escapeHtml(info.name)}</span><span class="dep-type">${escapeHtml(DEP_LABELS[dep.t])}</span>
+            </button>`;
+        }).join("");
+        return chips ? `<div class="dep-group"><span class="dep-group-label">${DEP_LABELS[t]}</span>${chips}</div>` : "";
+    }).join("");
+    groupsEl.innerHTML = html || `<span class="text-mute">该模组没有已声明的依赖。</span>`;
+}
+
+// 详情页：版本日志折叠 / 前置依赖跳转 / 打开下载悬浮框（事件委托）
 document.getElementById("modDetail").addEventListener("click", async (e) => {
     const rv = e.target.closest(".rv-item.has-cl");
     if (rv) {
@@ -1227,106 +1240,70 @@ document.getElementById("modDetail").addEventListener("click", async (e) => {
         if (chev) chev.classList.toggle("open", open === "1");
         return;
     }
-    const browse = e.target.closest("#btnBrowseDlDir");
-    if (browse) {
-        const data = await getJSON(`${API}/pick_folder?title=选择模组保存目录`);
-        if (data.folder) document.getElementById("dlSaveDir").value = data.folder;
+    const dlOpen = e.target.closest("#btnDlOpen");
+    if (dlOpen) {
+        openDlModal();
         return;
     }
-    const ext = e.target.closest("#btnOpenSourcePage");
-    if (ext) {
-        if (lastDetail) openSourcePage(lastDetail.project_id, lastDetail.source);
-        return;
-    }
-    // V3.5：前置依赖跳转
+    // V3.6.1：前置依赖跳转
     const dep = e.target.closest(".dep-chip");
     if (dep) {
         openDetail(dep.dataset.pid, state.detailBackPage);
         return;
     }
-    // V3.5：反依赖分析
-    const revBtn = e.target.closest("#btnRevDeps");
-    if (revBtn) {
-        runReverseDeps();
-        return;
-    }
-    const dl = e.target.closest("#btnDlDownload");
-    if (dl) {
-        const pid = document.getElementById("dlPid").value.trim();
-        const mc = document.getElementById("dlMc").value.trim();
-        const loader = document.getElementById("dlLoader").value;
-        const saveDir = document.getElementById("dlSaveDir").value.trim();
-        if (!mc) { toast("请填写目标游戏版本", "err"); return; }
-        if (!saveDir) { toast("请填写保存目录", "err"); return; }
-        savePref(mc, loader, saveDir);
-        try {
-            const data = await postJSON(`${API}/download_single_mod`, {
-                project_id: pid, mc_version: mc, loader, save_dir: saveDir,
-            });
-            toast(data.queued ? "已加入下载队列排队" : "单模组下载已启动", "ok");
-            resetPage(state.detailBackPage || "pageC");
-            switchPage("pageD");
-        } catch (err) {
-            toast("启动失败：" + err.message, "err");
-        }
+});
+
+// V3.6.1：下拉切换前置依赖的版本
+document.getElementById("modDetail").addEventListener("change", (e) => {
+    if (e.target && e.target.id === "depVerSel") {
+        const idx = parseInt(e.target.value, 10);
+        if (!isNaN(idx)) showDetailDeps(idx);
     }
 });
 
-// V3.5：详情页反依赖分析 —— 上下文取自来源页面（导出 / 导入 / 迁移 / 自定义 / 列表 / 本地）
-function detailContextMods() {
-    const from = state.detailBackPage || "pageC";
-    const mods = {
-        pageA: state.scannedMods.filter(m => m.project_id),
-        pageB: state.bpItems.filter(m => m.project_id),
-        pageC: catalogState.lastHits,
-        pageE: state.manMods.filter(m => m.project_id),
-        pageI: state.migMods.filter(m => m.project_id),
-        pageJ: state.customMods,
-    }[from] || [];
-    return mods.map(m => ({ project_id: m.project_id, name: m.name || m.title || m.project_id, source: m.source || "modrinth" }));
+// V3.6.1：详情页下载悬浮框 —— 下载该模组精简为一个按钮
+function openDlModal() {
+    const pidEl = document.getElementById("dlPid");
+    if (pidEl) pidEl.value = state.detailPid || "";
+    const mc = document.getElementById("dlMc");
+    if (mc && !mc.value) mc.value = pref.mc || "";
+    const ldr = document.getElementById("dlLoader");
+    if (ldr && !ldr.options.length) {
+        ldr.innerHTML = Object.entries(LOADER_LABELS)
+            .map(([v, label]) => `<option value="${v}" ${pref.loader === v ? "selected" : ""}>${label}</option>`)
+            .join("");
+    }
+    const dir = document.getElementById("dlSaveDir");
+    if (dir && !dir.value) dir.value = pref.saveDir || "";
+    openModalEl("dlModal");
 }
 
-async function runReverseDeps() {
-    const pid = state.detailPid;
-    const mods = detailContextMods();
-    if (!mods.length) {
-        document.getElementById("revResult").innerHTML =
-            `<div class="rev-empty">当前来源页面没有可分析的模组清单，请先在来源页扫描或添加模组。</div>`;
-        return;
-    }
-    const box = document.getElementById("revResult");
-    box.innerHTML = `<div class="rev-empty rev-busy">正在分析 ${mods.length} 个项目，请稍候…</div>`;
-    const btn = document.getElementById("btnRevDeps");
-    if (btn) btn.disabled = true;
+document.getElementById("btnDlClose").addEventListener("click", () => closeModalEl("dlModal"));
+document.getElementById("dlModal").addEventListener("click", (e) => {
+    if (e.target === document.getElementById("dlModal")) closeModalEl("dlModal");
+});
+document.getElementById("btnBrowseDlDir").addEventListener("click", async () => {
+    const data = await getJSON(`${API}/pick_folder?title=选择模组保存目录`);
+    if (data.folder) document.getElementById("dlSaveDir").value = data.folder;
+});
+document.getElementById("btnDlDownload").addEventListener("click", async () => {
+    const pid = document.getElementById("dlPid").value.trim();
+    const mc = document.getElementById("dlMc").value.trim();
+    const loader = document.getElementById("dlLoader").value;
+    const saveDir = document.getElementById("dlSaveDir").value.trim();
+    if (!mc) { toast("请填写目标游戏版本", "err"); return; }
+    if (!saveDir) { toast("请填写保存目录", "err"); return; }
+    savePref(mc, loader, saveDir);
     try {
-        const data = await postJSON(`${API}/reverse_deps`, { project_id: pid, mods });
-        const results = data.results || [];
-        if (!results.length) {
-            box.innerHTML = `<div class="rev-empty">未发现依赖该模组的项目（已检查 ${data.checked || 0} 个${data.errors ? "，失败 " + data.errors : ""}）。</div>`;
-            return;
-        }
-        const items = results.map(r => `
-            <div class="rev-item">
-                <span class="chip chip-loader">${escapeHtml(r.dependency_type || "required")}</span>
-                <button class="rev-name" data-pid="${escapeHtml(r.project_id)}">${escapeHtml(r.name || r.project_id)}</button>
-                <span class="rev-src text-mute">${escapeHtml(r.source)}</span>
-            </div>`).join("");
-        box.innerHTML = `
-            <div class="rev-head">共 ${results.length} 个反依赖（已检查 ${data.checked || 0} 个）</div>
-            <div class="rev-list">${items}</div>`;
+        const data = await postJSON(`${API}/download_single_mod`, {
+            project_id: pid, mc_version: mc, loader, save_dir: saveDir,
+        });
+        closeModalEl("dlModal");
+        toast(data.queued ? "已加入下载队列排队" : "单模组下载已启动", "ok");
+        resetPage(state.detailBackPage || "pageC");
+        switchPage("pageD");
     } catch (err) {
-        box.innerHTML = `<div class="rev-empty">分析失败：${escapeHtml(err.message)}</div>`;
-    } finally {
-        if (btn) btn.disabled = false;
-    }
-}
-
-// 反依赖结果跳转（事件委托）
-document.getElementById("modDetail").addEventListener("click", (e) => {
-    const rev = e.target.closest(".rev-name");
-    if (rev) {
-        e.stopPropagation();
-        openDetail(rev.dataset.pid, state.detailBackPage);
+        toast("启动失败：" + err.message, "err");
     }
 });
 
@@ -2551,6 +2528,23 @@ function saveCustomMods() {
 // 页面 J：我的清单 / 自定义模组包（V3.6）——悬浮框搜索添加 + 自动前置依赖 + 悬浮框导出
 // ================================================================
 
+// 悬浮框开合动效（V3.6.1）：关闭时先播反向动画再隐藏
+function openModalEl(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove("closing");
+    el.style.display = "flex";
+}
+function closeModalEl(id) {
+    const el = document.getElementById(id);
+    if (!el || el.classList.contains("closing")) return;
+    el.classList.add("closing");
+    setTimeout(() => {
+        el.classList.remove("closing");
+        el.style.display = "none";
+    }, 170);
+}
+
 // ---------- 添加模组悬浮框 ----------
 function openCustomAddModal() {
     state.customSel = new Map();
@@ -2564,11 +2558,11 @@ function openCustomAddModal() {
             <div class="empty-state-desc">勾选模组后将显示其前置依赖，确认时自动一并添加。</div>
         </div>`;
     updateCustomSelUI();
-    document.getElementById("customAddModal").style.display = "";
-    setTimeout(() => { if (q) q.focus(); }, 50);
+    openModalEl("customAddModal");
+    setTimeout(() => { if (q) q.focus(); }, 60);
 }
 function closeCustomAddModal() {
-    document.getElementById("customAddModal").style.display = "none";
+    closeModalEl("customAddModal");
 }
 document.getElementById("btnCustomAdd").addEventListener("click", openCustomAddModal);
 document.getElementById("btnCustomAddClose").addEventListener("click", closeCustomAddModal);
@@ -2721,14 +2715,16 @@ function confirmAddCustom() {
     if (!state.customSel.size) { toast("请先勾选模组", "err"); return; }
     const toAdd = [];
     const seen = new Set(state.customMods.map(m => m.project_id));
-    const push = (pid, name) => {
+    let depAdded = 0;
+    const push = (pid, name, isDep) => {
         if (seen.has(pid)) return;
         seen.add(pid);
         toAdd.push({ project_id: pid, name, source: "modrinth", custom_name: name });
+        if (isDep) depAdded++;
     };
     for (const sel of state.customSel.values()) {
-        push(sel.pid, sel.name);
-        for (const d of (state.customDepInfo[sel.pid] || [])) push(d.project_id, d.name);
+        push(sel.pid, sel.name, false);
+        for (const d of (state.customDepInfo[sel.pid] || [])) push(d.project_id, d.name, true);
     }
     if (!toAdd.length) {
         toast("所选模组及其依赖均已在清单中", "warn");
@@ -2739,17 +2735,19 @@ function confirmAddCustom() {
     saveCustomMods();
     renderCustomList();
     closeCustomAddModal();
-    toast(`已添加 ${toAdd.length} 个模组到清单`, "ok");
+    toast(depAdded
+        ? `已添加 ${toAdd.length} 个模组到清单，包含 ${depAdded} 个前置模组`
+        : `已添加 ${toAdd.length} 个模组到清单`, "ok");
 }
 
 // ---------- 导出悬浮框 ----------
 function openCustomExportModal() {
     const mc = document.getElementById("customMc");
     if (mc && !mc.value) mc.value = pref.mc || "";
-    document.getElementById("customExportModal").style.display = "";
+    openModalEl("customExportModal");
 }
 function closeCustomExportModal() {
-    document.getElementById("customExportModal").style.display = "none";
+    closeModalEl("customExportModal");
 }
 document.getElementById("btnCustomExport").addEventListener("click", openCustomExportModal);
 document.getElementById("btnCustomExportClose").addEventListener("click", closeCustomExportModal);
@@ -2794,7 +2792,7 @@ function renderCustomList() {
         box.innerHTML = `
             <div class="empty-state compact">
                 <div class="empty-state-title">清单为空</div>
-                <div class="empty-state-desc">从上方搜索结果中添加模组，点击每行的文件名可自定义。</div>
+                <div class="empty-state-desc">点击右上角「添加模组」，将自动附带所需前置依赖；点击每行文件名可自定义。</div>
             </div>`;
         return;
     }

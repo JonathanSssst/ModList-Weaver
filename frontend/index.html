@@ -731,17 +731,24 @@
                     <div class="page-head">
                         <div>
                             <h2 class="page-title">我的清单</h2>
-                            <p class="page-desc">自定义模组包：搜索添加模组（自动附带前置依赖）、调整顺序与自定义名称，导出为与标准清单同格式的 JSON。</p>
                         </div>
                         <div class="page-head-right">
                             <div class="page-stats" id="customStat">
-                                <div class="stat-card stat-total">
+                                <div class="stat-card stat-total stat-pill">
                                     <div class="stat-num" id="customCount">0</div>
                                     <div class="stat-label">清单模组</div>
                                 </div>
                             </div>
                             <div class="page-actions">
-                                <button class="btn btn-outline btn-sm" id="btnCustomClear" title="清空清单">清空</button>
+                                <button class="btn btn-outline" id="btnCustomClear" title="清空清单">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="3 6 5 6 21 6"/>
+                                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                        <path d="M10 11v6M14 11v6"/>
+                                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                                    </svg>
+                                    清空
+                                </button>
                                 <button class="btn btn-primary" id="btnCustomExport" title="导出清单">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -750,7 +757,13 @@
                                     </svg>
                                     导出
                                 </button>
-                                <button class="btn btn-primary btn-circle" id="btnCustomAdd" title="添加模组">+</button>
+                                <button class="btn btn-primary" id="btnCustomAdd" title="添加模组">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="12" y1="5" x2="12" y2="19"/>
+                                        <line x1="5" y1="12" x2="19" y2="12"/>
+                                    </svg>
+                                    添加模组
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -764,7 +777,7 @@
                             <div class="mod-list" id="customList">
                                 <div class="empty-state compact">
                                     <div class="empty-state-title">清单为空</div>
-                                    <div class="empty-state-desc">点击右上角「+」添加模组，将自动附带所需前置依赖。</div>
+                                    <div class="empty-state-desc">点击右上角「添加模组」按钮，将自动附带所需前置依赖。</div>
                                 </div>
                             </div>
                         </div>
@@ -867,6 +880,56 @@
                     </div>
                 </div>
 
+                <!-- 详情页下载悬浮框（V3.6.1） -->
+                <div class="modal-mask" id="dlModal" style="display:none">
+                    <div class="modal modal-narrow">
+                        <div class="modal-head">
+                            <span class="modal-title">下载该模组</span>
+                            <div class="modal-actions">
+                                <button class="icon-btn" id="btnDlClose" title="关闭">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="modal-body">
+                            <div class="form-row form-row-grid">
+                                <div class="form-field form-field-2col">
+                                    <label>项目 ID（自动填入）</label>
+                                    <input type="text" id="dlPid" class="input monospaced" readonly />
+                                </div>
+                                <div class="form-field">
+                                    <label>目标游戏版本</label>
+                                    <input type="text" id="dlMc" class="input" list="mcVersionsList" placeholder="选择或输入 MC 版本，如 1.21.1" />
+                                </div>
+                                <div class="form-field">
+                                    <label>目标加载器</label>
+                                    <select id="dlLoader" class="input"></select>
+                                </div>
+                                <div class="form-field form-field-2col">
+                                    <label>保存目录</label>
+                                    <div class="input-group">
+                                        <input type="text" id="dlSaveDir" class="input" placeholder="模组保存目录" />
+                                        <button class="btn btn-outline" id="btnBrowseDlDir">浏览…</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-foot">
+                            <span class="mt-hint">自动解析并下载 required 前置依赖</span>
+                            <button class="btn btn-primary" id="btnDlDownload">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="7 10 12 15 17 10"/>
+                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                                下载
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ==================== 页面 C：模组列表（列表 + 详情） ==================== -->
                 <section class="page" id="pageC">
 
@@ -889,9 +952,6 @@
                         </div>
 
                         <div class="card cat-filter-card">
-                            <div class="card-head">
-                                <div class="ch-title">搜索与筛选</div>
-                            </div>
                             <div class="card-body">
                                 <div class="form-row form-row-grid">
                                     <div class="form-field">
@@ -1267,7 +1327,7 @@
                                             <li><b>【模组迁移】</b>扫描源目录后直接按目标版本/加载器批量下载到新目录，跳过导出清单步骤。</li>
                                             <li><b>【自定义模组包】</b>搜索添加 / 移除模组，自定义文件名与顺序，导出与标准清单同格式的 JSON。</li>
                                             <li><b>【模组列表】</b>压缩搜索筛选区高度、扩展列表区高度（总高度不变），减少滚动。</li>
-                                            <li><b>【详情页】</b>新增前置依赖展示（点击跳转依赖详情）与反依赖（后置）分析；作者按 原开发者 / 维护者 / 贡献者 标注角色。</li>
+                                            <li><b>【详情页】</b>新增前置依赖展示（点击跳转依赖详情）。</li>
                                             <li><b>【返回逻辑】</b>详情页返回按钮回到来源页面（导出 / 导入 / 迁移 / 自定义 等），不再固定回模组列表。</li>
                                         </ul>
                                     </div>

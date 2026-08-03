@@ -1506,9 +1506,9 @@ select.input {
     flex-wrap: wrap;
 }
 .d-icon {
-    width: 76px;
-    height: 76px;
-    border-radius: 16px;
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
     object-fit: cover;
     border: 1px solid var(--border);
     background: var(--bg-elev);
@@ -2482,33 +2482,8 @@ select.input {
 }
 
 /* ================================================================ */
-/* V3.5：详情页 作者角色 / 前置依赖 / 反依赖 */
+/* V3.5：详情页 前置依赖 */
 /* ================================================================ */
-.author-role {
-    font-size: 10.5px;
-    line-height: 1;
-    padding: 3px 7px;
-    border-radius: 999px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
-    white-space: nowrap;
-}
-.author-role-creator {
-    color: var(--ok, #16a34a);
-    background: rgba(22, 163, 74, 0.12);
-    border: 1px solid rgba(22, 163, 74, 0.28);
-}
-.author-role-maintainer {
-    color: var(--primary);
-    background: var(--primary-soft);
-    border: 1px solid rgba(59, 110, 245, 0.28);
-}
-.author-role-contributor {
-    color: var(--text-mute);
-    background: var(--bg-elev);
-    border: 1px solid var(--border-soft);
-}
-
 .dep-group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
 .dep-group:last-child { margin-bottom: 0; }
 .dep-group-label {
@@ -2542,48 +2517,40 @@ select.input {
 .dep-chip-incompatible { opacity: 0.55; text-decoration: line-through; }
 .dep-chip-incompatible .dep-type { text-decoration: line-through; }
 
-.rev-empty {
-    padding: 14px 16px;
-    border: 1px dashed var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text-mute);
-    font-size: 12.5px;
-    line-height: 1.6;
-}
-.rev-busy { color: var(--primary); border-color: var(--primary-soft); background: var(--primary-soft); }
-.rev-head {
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text-dim);
-    margin-bottom: 8px;
-}
-.rev-list { display: flex; flex-direction: column; gap: 6px; }
-.rev-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-sm);
+/* V3.6.1：前置依赖显示名称 + 图标（不显示 ID） */
+.dep-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    object-fit: cover;
     background: var(--bg-elev);
+    flex-shrink: 0;
+    display: inline-block;
 }
-.rev-name {
-    border: none;
-    background: none;
+.dep-icon-ph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
     color: var(--primary);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: left;
-    padding: 0;
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-family: var(--font-mono);
 }
-.rev-name:hover { text-decoration: underline; }
-.rev-src { font-size: 11.5px; font-family: var(--font-mono); }
+.dep-name {
+    font-family: var(--font);
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* V3.6.1：前置依赖 —— 版本选择下拉框（默认最新版本） */
+.dep-ver-select {
+    width: auto;
+    min-width: 240px;
+    max-width: 62%;
+    height: 32px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
 
 /* ================================================================ */
 /* V3.5：模组列表页高度优化（压缩筛选区、扩展列表区） */
@@ -2663,19 +2630,6 @@ select.input {
     gap: 8px;
     flex-shrink: 0;
 }
-.btn-circle {
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    border-radius: 50%;
-    font-size: 22px;
-    font-weight: 600;
-    line-height: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-.btn-circle svg { width: 18px; height: 18px; }
 
 /* ---- 悬浮框尺寸与底部 ---- */
 .modal-wide { width: min(960px, 94vw); }
@@ -2719,6 +2673,93 @@ select.input {
 .c-deps b { color: var(--ok); font-weight: 600; }
 .c-deps .chip { font-size: 11px; }
 .c-deps-tag { color: var(--text-mute); font-style: italic; }
+
+/* ================================================================ */
+/* V3.6.1：我的清单页头部统一风格 + 悬浮框动效与排版 */
+/* ================================================================ */
+
+/* ---- 悬浮框开合动效（遮罩淡入淡出 + 弹层缩放滑入） ---- */
+.modal-mask { animation: modalMaskIn 0.18s ease; }
+.modal-mask .modal { animation: modalPopIn 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.05); }
+.modal-mask.closing { animation: modalMaskOut 0.16s ease forwards; }
+.modal-mask.closing .modal { animation: modalPopOut 0.16s ease forwards; }
+@keyframes modalMaskIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalMaskOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes modalPopIn {
+    from { opacity: 0; transform: translateY(16px) scale(0.96); }
+    to { opacity: 1; transform: none; }
+}
+@keyframes modalPopOut {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(10px) scale(0.97); }
+}
+
+/* ---- 悬浮框排版：标题字体 / 边距 ---- */
+.modal-head { padding: 15px 20px; }
+.modal-title { font-family: var(--font); font-size: 15px; font-weight: 700; letter-spacing: 0.3px; }
+.modal-foot { padding: 13px 20px; }
+#customAddModal .modal-body,
+#customExportModal .modal-body,
+#dlModal .modal-body { padding: 16px 20px; }
+#customAddModal .modal-foot,
+#customExportModal .modal-foot,
+#dlModal .modal-foot { border-radius: 0 0 var(--radius) var(--radius); }
+
+/* ---- 图标按钮（仅图标，省略文字） ---- */
+.btn-icon-only {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    flex-shrink: 0;
+}
+.btn-icon-only svg { width: 15px; height: 15px; }
+
+/* ---- 我的清单页头部：模组数量 + 清空 / 导出 / 添加 统一高度风格 ---- */
+#pageJ .page-head-right { gap: 12px; }
+#pageJ .page-actions { gap: 8px; }
+#pageJ .page-actions .btn { height: 38px; padding: 0 15px; border-radius: 10px; }
+#pageJ .page-stats .stat-card {
+    min-width: 0;
+    height: 38px;
+    padding: 0 15px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    border-radius: 10px;
+    text-align: left;
+}
+#pageJ .page-stats .stat-card:hover { transform: none; box-shadow: var(--shadow-card); }
+#pageJ .page-stats .stat-num { font-size: 16px; line-height: 1; }
+#pageJ .page-stats .stat-label { margin-top: 0; font-size: 12px; white-space: nowrap; }
+
+/* ---- 模组列表页头部：结果数 / 当前页 紧凑显示 ---- */
+#pageC .page-stats .stat-card {
+    min-width: 0;
+    height: 36px;
+    padding: 0 13px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 7px;
+    border-radius: 10px;
+    text-align: left;
+}
+#pageC .page-stats .stat-card:hover { transform: none; box-shadow: var(--shadow-card); }
+#pageC .page-stats .stat-num { font-size: 15px; line-height: 1; }
+#pageC .page-stats .stat-label { margin-top: 0; font-size: 12px; white-space: nowrap; }
+
+/* ---- 我的清单列表行微调 ---- */
+#pageJ .mod-list { max-height: none; }
+#pageJ .custom-item { padding: 11px 20px; }
+#pageJ .custom-item .m-pid { font-size: 11px; }
+#pageJ .custom-item .c-rename { min-width: 150px; max-width: 200px; }
+
+/* ---- 添加悬浮框：搜索结果行间距 / 勾选框 ---- */
+#customAddModal .custom-search-results .cat-item { padding: 12px 16px; }
+#customAddModal .c-sel { width: 18px; height: 18px; margin-top: 0; }
+#customAddModal .custom-search-results .cat-icon { width: 46px; height: 46px; border-radius: 10px; }
+#customAddModal .c-deps { margin-top: 7px; }
 
 
 
