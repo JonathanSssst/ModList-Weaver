@@ -96,6 +96,9 @@ body {
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 a {
@@ -110,11 +113,88 @@ svg {
 }
 
 /* ================================================================ */
+/* 自定义标题栏（frameless 无边框窗口，V3.7） */
+/* ================================================================ */
+.titlebar {
+    height: var(--titlebar-h, 42px);
+    min-height: var(--titlebar-h, 42px);
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+    z-index: 100;
+}
+.titlebar-drag {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    cursor: default;
+}
+.titlebar-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--primary);
+    flex-shrink: 0;
+}
+.titlebar-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.titlebar-version {
+    font-size: 12px;
+    color: var(--text-mute);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+.titlebar-controls {
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+}
+.tb-btn {
+    width: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.tb-btn svg {
+    width: 10px;
+    height: 10px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.1;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.tb-btn:hover { background: rgba(0, 0, 0, 0.06); color: var(--text); }
+.tb-btn:active { background: rgba(0, 0, 0, 0.09); }
+.tb-close:hover { background: #e81123; color: #ffffff; }
+.tb-close:active { background: #c50f1f; color: #ffffff; }
+[data-theme="dark"] .tb-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+[data-theme="dark"] .tb-btn:active { background: rgba(255, 255, 255, 0.12); }
+
+/* ================================================================ */
 /* 应用外壳 */
 /* ================================================================ */
 .app-shell {
     display: flex;
-    height: 100vh;
+    flex: 1;
+    min-height: 0;
+    height: auto;
     overflow: hidden;
     transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }

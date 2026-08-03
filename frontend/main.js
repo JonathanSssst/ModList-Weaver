@@ -3105,6 +3105,145 @@ document.getElementById("btnBrowseCustom").addEventListener("click", async () =>
 });
 
 // ================================================================
+// 自定义标题栏（frameless 无边框窗口，V3.7）
+// ================================================================
+const tbMin = document.getElementById("tbMin");
+const tbMax = document.getElementById("tbMax");
+const tbClose = document.getElementById("tbClose");
+const tbMaxSvg = document.getElementById("tbMaxSvg");
+const tbRestoreSvg = document.getElementById("tbRestoreSvg");
+const tbDrag = document.getElementById("titlebarDrag");
+
+function pvApi() {
+    return (window.pywebview && window.pywebview.api) || null;
+}
+
+function setMaximizedUi(maximized) {
+    if (tbMaxSvg) tbMaxSvg.style.display = maximized ? "none" : "block";
+    if (tbRestoreSvg) tbRestoreSvg.style.display = maximized ? "block" : "none";
+    if (tbMax) tbMax.title = maximized ? "还原" : "最大化";
+}
+
+async function initMaximizedState() {
+    const api = pvApi();
+    try {
+        if (api && typeof api.is_maximized === "function") {
+            setMaximizedUi(await api.is_maximized());
+        }
+    } catch (_) {}
+}
+
+function titlebarToggleMaximize() {
+    const api = pvApi();
+    if (!api || typeof api.toggle_maximize !== "function") return;
+    api.toggle_maximize();
+}
+
+if (tbMin) tbMin.addEventListener("click", () => {
+    const api = pvApi();
+    if (api && typeof api.minimize === "function") api.minimize();
+});
+if (tbMax) tbMax.addEventListener("click", titlebarToggleMaximize);
+if (tbClose) tbClose.addEventListener("click", () => {
+    const api = pvApi();
+    if (api && typeof api.close === "function") api.close();
+});
+// 双击标题栏最大化 / 还原（无边框窗口下系统原生双击行为由 WM_NCLBUTTONDBLCLK 处理，
+// 此处作为浏览器调试兜底）
+if (tbDrag) tbDrag.addEventListener("dblclick", (e) => {
+    if (e.target.closest(".tb-btn")) return;
+    titlebarToggleMaximize();
+});
+// 跟随最大化状态切换按钮图标（任何最大化/还原路径都会触发 resize）
+window.addEventListener("resize", () => {
+    const maximized = Math.abs(window.innerWidth - window.screen.availWidth) < 2
+        && Math.abs(window.innerHeight - window.screen.availHeight) < 2;
+    setMaximizedUi(maximized);
+});
+
+// ================================================================
+// 无边框窗口边缘拖拽调宽（V3.7）
+// 说明：无边框窗口的鼠标命中测试落在 WebView2 子窗口上，系统级边缘缩放不可用，
+// 这里在前端捕获 6px 边缘并用 pywebview 的 window.resize(fix_point) 实现缩放。
+// ================================================================
+const RESIZE_BORDER = 6; // 需与 main.py _RESIZE_BORDER 一致
+const MIN_WINDOW_W = 980; // 需与 main.py min_size 一致
+const MIN_WINDOW_H = 680;
+
+// fix_point 位组合：1=NORTH 2=WEST 4=EAST 8=SOUTH（固定该边/角不动）
+const RESIZE_FIX = {
+    "nw": 12, "n": 10, "ne": 10,
+    "w": 5, "e": 3,
+    "sw": 5, "s": 3, "se": 3,
+};
+const RESIZE_CURSOR = {
+    "nw": "nwse-resize", "n": "ns-resize", "ne": "nesw-resize",
+    "w": "ew-resize", "e": "ew-resize",
+    "sw": "nesw-resize", "s": "ns-resize", "se": "nwse-resize",
+};
+
+let resizeCtl = null;
+
+function resizeDirAt(e) {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const x = e.clientX, y = e.clientY;
+    const l = x <= RESIZE_BORDER, r = x >= vw - RESIZE_BORDER;
+    const t = y <= RESIZE_BORDER, b = y >= vh - RESIZE_BORDER;
+    if (t) return l ? "nw" : r ? "ne" : "n";
+    if (b) return l ? "sw" : r ? "se" : "s";
+    if (l) return "w";
+    if (r) return "e";
+    return "";
+}
+
+function resizePointerMove(e) {
+    if (!resizeCtl) return;
+    const api = pvApi();
+    if (!api || typeof api.resize !== "function") return;
+    const scale = window.devicePixelRatio || 1; // screenX/screenY 为物理像素，需换算为逻辑像素
+    const ddx = (e.screenX - resizeCtl.sx) / scale;
+    const ddy = (e.screenY - resizeCtl.sy) / scale;
+    let nw = resizeCtl.ww, nh = resizeCtl.wh;
+    if (resizeCtl.dir.indexOf("e") >= 0) nw = Math.max(MIN_WINDOW_W, resizeCtl.ww + ddx);
+    if (resizeCtl.dir.indexOf("w") >= 0) nw = Math.max(MIN_WINDOW_W, resizeCtl.ww - ddx);
+    if (resizeCtl.dir.indexOf("s") >= 0) nh = Math.max(MIN_WINDOW_H, resizeCtl.wh + ddy);
+    if (resizeCtl.dir.indexOf("n") >= 0) nh = Math.max(MIN_WINDOW_H, resizeCtl.wh - ddy);
+    api.resize(nw, nh, RESIZE_FIX[resizeCtl.dir]);
+}
+
+function resizePointerUp() {
+    if (resizeCtl) {
+        try { document.body.releasePointerCapture(resizeCtl.pointerId); } catch (_) {}
+        resizeCtl = null;
+    }
+}
+
+// 用捕获阶段监听，先于 pywebview 拖拽区（body mousedown）处理，边缘按下时阻止其触发窗口拖动
+document.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    const dir = resizeDirAt(e);
+    if (!dir) return;
+    const api = pvApi();
+    if (!api || typeof api.resize !== "function") return;
+    e.preventDefault();
+    e.stopPropagation();
+    try { document.body.setPointerCapture(e.pointerId); } catch (_) {}
+    resizeCtl = { dir, sx: e.screenX, sy: e.screenY, ww: window.innerWidth, wh: window.innerHeight, pointerId: e.pointerId };
+}, true);
+
+document.addEventListener("pointermove", (e) => {
+    if (resizeCtl) {
+        resizePointerMove(e);
+        return;
+    }
+    const dir = resizeDirAt(e);
+    document.body.style.cursor = dir ? RESIZE_CURSOR[dir] : "";
+});
+
+document.addEventListener("pointerup", resizePointerUp);
+window.addEventListener("blur", resizePointerUp);
+
+// ================================================================
 // 启动
 // ================================================================
 setStatus("就绪");
@@ -3113,6 +3252,7 @@ startQueuePoll();
 loadSettings();
 loadCustomMods(); // V3.5：恢复自定义模组包清单
 checkAppUpdate(false); // 启动检查软件更新（V3.1）
+initMaximizedState(); // 标题栏最大化按钮初始状态（frameless，V3.7）
 // 请求系统通知权限（下载完成提示用，V3.2）；WebView2 可能不支持，静默失败
 try {
     if (window.Notification && Notification.permission === "default") {
@@ -3129,6 +3269,9 @@ try {
         // 侧边栏
         const sbSub = document.querySelector(".sb-sub");
         if (sbSub && ver) sbSub.textContent = `模组迁移工具 v${ver}`;
+        // 自定义标题栏版本号（frameless，V3.7）
+        const tbVer = document.getElementById("titlebarVersion");
+        if (tbVer && ver) tbVer.textContent = `v${ver}`;
         // 关于页
         const aboutVer = document.querySelector(".about-ver");
         if (aboutVer && ver) aboutVer.textContent = `版本 v${ver}`;

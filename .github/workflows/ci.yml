@@ -131,7 +131,7 @@ jobs:
               "### 自动构建产物",
               "Windows x64 提供两种分发方式，任选其一：",
               "",
-              "- `${{ env.PACKAGE_NAME }}-Windows-vX.X.X.zip`：便携版，解压后得到一个 `ModList-Weaver` 文件夹，双击其中的 `ModList-Weaver.exe` 即可运行（无需单独提取 _internal）。",
+              "- `${{ env.PACKAGE_NAME }}-Windows-vX.X.X.zip`：便携版，解压后得到一个 `ModList-Weaver` 文件夹，双击其中的 `ModList-Weaver.exe` 即可运行（需同时提取文件夹 _internal）。",
               "- `${{ env.PACKAGE_NAME }}-Windows-vX.X.X-setup.exe`：安装版，双击安装到 `%LocalAppData%\\ModList-Weaver`，自动创建开始菜单 / 桌面快捷方式（无需解压）。",
               "", "### 使用方法",
               "1. 解压压缩包到任意目录，或运行安装包完成安装",

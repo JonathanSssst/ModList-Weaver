@@ -2,7 +2,7 @@
 
 > Minecraft 双源（Modrinth / CurseForge）模组迁移桌面工具 —— 一键扫描本地 mods，导出模组清单，跨版本/跨加载器批量重下载，自带断点续传、哈希校验、依赖递归与任务队列。
 
-当前版本：**v3.6.3** · 平台：Windows x64（PyInstaller 打包 + Inno Setup 安装包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
+当前版本：**v3.6.4** · 平台：Windows x64（PyInstaller 打包 + Inno Setup 安装包） · 技术栈：Python 3.10+ / FastAPI / pywebview / 原生 HTML+JS
 
 ---
 
@@ -74,7 +74,7 @@ pyinstaller build.spec
 # 产物位于 dist/ModList-Weaver/
 
 # （可选）编译 Inno Setup 安装包（需已安装 Inno Setup 6）
-# "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=3.6.3 installer.iss
+# "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=3.6.4 installer.iss
 # 产物位于 output/
 ```
 
@@ -145,6 +145,7 @@ pyinstaller build.spec
 - 向导式工作流（扫描导出三步、批量下载四步）
 - 应用图标：源码运行与打包后均带自定义图标（`assets/app.ico`）
 - 模组任意位置「打开源页面」：清单行 / 目录 / 详情页一键跳转原始项目页
+- 无边框窗口 + 自定义标题栏：拖动标题栏移动窗口（仅标题栏可拖动，内容区不受影响）、双击最大化 / 还原、四边四角拖拽调宽、最大化不遮挡任务栏（V3.6.4）
 
 ### 8. 下载完成通知与存储清理（V3.2）
 
@@ -419,6 +420,12 @@ project.source 字段优先级最高
 ## 版本历史
 
 完整 Changelog 在软件内「更新日志」页动态渲染（数据源：`backend/api.py:CHANGELOG`）。
+
+### v3.6.4（2026-08）· 无边框窗口 · 自定义标题栏
+
+- **无边框窗口**：改为 frameless 窗口 + 前端自定义标题栏——拖动标题栏移动窗口（仅标题栏可拖动，内容区不受影响）、双击标题栏最大化 / 还原、最小化 / 最大化 / 关闭按钮、四边与四角拖拽调宽（带缩放光标提示）。
+- **最大化**：尺寸自动钳制在工作区内，不遮挡任务栏；最大化 / 还原时标题栏图标自动切换。
+- **界面**：标题栏配色随主题切换，窗口控制按钮悬停高亮（关闭按钮悬停变红）。
 
 ### v3.6.3（2026-08）· 扫描进度显示 · 本地目录记忆修复
 

@@ -3,10 +3,38 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ModList-Weaver v3.5.0 · Minecraft 双源模组迁移工具</title>
+    <title>ModList-Weaver v3.6.4 · Minecraft 双源模组迁移工具</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
+    <!-- 自定义标题栏（frameless 无边框窗口，V3.7）：整条可拖动窗口，右侧为窗口控制按钮 -->
+    <div class="titlebar" id="titlebar">
+        <div class="titlebar-drag pywebview-drag-region" id="titlebarDrag" title="拖动移动窗口 · 双击最大化 / 还原">
+            <svg class="titlebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+            <span class="titlebar-title" id="titlebarTitle">ModList-Weaver</span>
+            <span class="titlebar-version" id="titlebarVersion">v3.6.4</span>
+        </div>
+        <div class="titlebar-controls">
+            <button class="tb-btn" id="tbMin" title="最小化" aria-label="最小化">
+                <svg viewBox="0 0 10 10"><line x1="1" y1="5" x2="9" y2="5"/></svg>
+            </button>
+            <button class="tb-btn" id="tbMax" title="最大化" aria-label="最大化">
+                <svg id="tbMaxSvg" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1"/></svg>
+                <svg id="tbRestoreSvg" viewBox="0 0 10 10" style="display:none">
+                    <rect x="1" y="2.5" width="6.5" height="6.5" rx="1"/>
+                    <path d="M2.5 2.5V1.8A0.8 0.8 0 0 1 3.3 1h4.9a0.8 0 0 1 .8.8v4.9a0.8 0 0 1-.8.8h-.7"/>
+                </svg>
+            </button>
+            <button class="tb-btn tb-close" id="tbClose" title="关闭" aria-label="关闭">
+                <svg viewBox="0 0 10 10"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg>
+            </button>
+        </div>
+    </div>
+
     <!-- 应用整体外壳 -->
     <div class="app-shell" id="appShell">
 
@@ -22,7 +50,7 @@
                 </div>
                 <div class="sidebar-brand-text">
                     <div class="sb-title">ModList-Weaver</div>
-                    <div class="sb-sub">模组迁移工具 v3.5.0</div>
+                    <div class="sb-sub">模组迁移工具 v3.6.4</div>
                 </div>
             </div>
 
@@ -1332,7 +1360,7 @@
                                 </div>
                                 <div class="about-hero-main">
                                     <div class="about-name">ModList-Weaver</div>
-                                    <div class="about-ver">版本 v3.5.0</div>
+                                    <div class="about-ver">版本 v3.6.4</div>
                                     <div class="about-desc">Minecraft 双源（Modrinth + CurseForge）模组迁移工具：扫描旧版本 mods 目录、导出 modlist.json、批量 / 单模组下载。</div>
                                     <div class="about-update-row">
                                         <button class="btn btn-outline btn-sm" id="btnCheckAppUpdate">检查更新</button>
@@ -1366,7 +1394,7 @@
                                 <div class="cl-item cl-fold" data-open="1">
                                     <div class="cl-head" role="button" title="点击展开/收起">
                                         <span class="cl-ver">
-                                            <a href="https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v3.5.0" target="_blank" rel="noopener">v3.5.0</a>
+                                            <a href="https://github.com/JonathanSssst/ModList-Weaver/releases/tag/v3.6.4" target="_blank" rel="noopener">v3.6.4</a>
                                         </span>
                                         <span class="cl-date">2026-08</span>
                                         <span class="cl-fold-hint">▾</span>
